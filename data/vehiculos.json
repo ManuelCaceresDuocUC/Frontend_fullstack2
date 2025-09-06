@@ -1,0 +1,14 @@
+[
+  {
+    "id": "7fe38c10-fe82-4d12-bf8e-114b2a1cff7a",
+    "userEmail": "manu.caceres@duocuc.cl",
+    "marca": "Opel",
+    "modelo": "Mokka",
+    "anio": 2025,
+    "precio": 20179000,
+    "tipo": "SUV",
+    "combustible": "Diesel",
+    "transmision": "Mecanica",
+    "imagen": "/gallery/25434efd8aaf1f63ea88a9210741985d.png"
+  }
+]

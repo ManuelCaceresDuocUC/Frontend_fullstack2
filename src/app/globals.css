@@ -5,11 +5,12 @@
   --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@layer theme {
+  :root {
+    --color-blue-600:  #482ce6;   /* antes azul del hero */
+    --color-indigo-800:#31114e;   /* fin del gradiente */
+    --color-yellow-400:#a088ff;   /* CTA */
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -19,8 +20,20 @@
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+
+body { font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif; }
+@layer components {
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:.75rem 1.5rem; border-radius:1rem; font-weight:600;
+    transition: background-color .2s, box-shadow .2s, color .2s;
+  }
+  .btn-primary{ color:#fff; background:#322ce6; }
+  .btn-primary:hover{ background:#4d4aff; box-shadow:0 0 30px 0 rgba(98, 90, 255, 0.25); }
+
+  .btn-ghost{
+    color:#fff; background:rgba(255,255,255,.10);
+    border:1px solid rgba(255,255,255,.20);
+  }
+  .btn-ghost:hover{ background:rgba(255,255,255,.15); }
 }
