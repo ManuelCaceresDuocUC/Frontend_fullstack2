@@ -1,19 +1,18 @@
-// app/api/auth/[...nextauth]/route.ts
-import NextAuth, { NextAuthOptions, Session, User } from "next-auth";
+import NextAuth, { type NextAuthOptions, type Session, type User } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import { JWT } from "next-auth/jwt";
+import { type JWT } from "next-auth/jwt";
 import { prisma } from "@/lib/prisma";
 
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").split(",");
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").split(",").map(s => s.trim());
 
-export const authOptions: NextAuthOptions = {
+const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_ID!,
       clientSecret: process.env.GOOGLE_SECRET!,
     }),
   ],
-  session: { strategy: "jwt" as const },
+  session: { strategy: "jwt" },
   callbacks: {
     async signIn({ user }: { user: User }) {
       if (!user.email) return false;
@@ -34,7 +33,7 @@ export const authOptions: NextAuthOptions = {
         const u = await prisma.user.findUnique({ where: { email: token.email } });
         if (u) {
           token.uid = u.id;
-          token.role = u.role as "ADMIN" | "USER";
+          token.role = (u.role as "ADMIN" | "USER") ?? "USER";
         }
       }
       return token;
