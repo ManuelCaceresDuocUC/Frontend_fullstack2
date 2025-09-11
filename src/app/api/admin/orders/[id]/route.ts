@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } } // <- sin alias
+  { params }: { params: { id: string } }
 ) {
   const body = (await req.json()) as {
     shipment?: { tracking?: string | null; carrier?: string | null; delivered?: boolean | null };
@@ -22,7 +22,9 @@ export async function PATCH(
               tracking: body.shipment.tracking ?? undefined,
               carrier: body.shipment.carrier ?? undefined,
               delivered:
-                typeof body.shipment.delivered === "boolean" ? body.shipment.delivered : undefined,
+                typeof body.shipment.delivered === "boolean"
+                  ? body.shipment.delivered
+                  : undefined,
             },
             create: {
               tracking: body.shipment.tracking ?? null,
