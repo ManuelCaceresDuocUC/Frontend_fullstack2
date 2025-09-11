@@ -1,5 +1,4 @@
 "use client";
-
 import { useCart } from "@/stores/cart";
 
 type Props = {
@@ -22,6 +21,8 @@ export default function AddToCartButton({
     if (disabled) return;
     add({ id, name, brand, ml, price, image, qty: 1 });
     open();
+    // Debug opcional:
+    // console.log("Cart items:", useCart.getState().items);
   };
 
   return (

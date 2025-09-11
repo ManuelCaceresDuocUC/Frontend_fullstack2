@@ -14,16 +14,23 @@ export type CartItem = {
 type CartState = {
   items: CartItem[];
   opened: boolean;
+
+  // acciones “nuevas”
   open: () => void;
   close: () => void;
   add: (item: Omit<CartItem, "qty"> & { qty?: number }) => void;
   remove: (id: string) => void;
   clear: () => void;
+
+  // alias para compatibilidad con componentes viejos
+  openDrawer: () => void;
+  addItem: (item: Omit<CartItem, "qty"> & { qty?: number }) => void;
 };
 
-export const useCart = create<CartState>((set) => ({
+export const useCart = create<CartState>((set, get) => ({
   items: [],
   opened: false,
+
   open: () => set({ opened: true }),
   close: () => set({ opened: false }),
 
@@ -56,4 +63,8 @@ export const useCart = create<CartState>((set) => ({
 
   remove: (id) => set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
   clear: () => set({ items: [] }),
+
+  // ===== alias =====
+  openDrawer: () => get().open(),
+  addItem: (item) => get().add(item),
 }));
