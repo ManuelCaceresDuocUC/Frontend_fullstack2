@@ -3,11 +3,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
-// Tipo amplio que Next acepta para params
-type RouteCtx = { params: Record<string, string | string[]> };
+type OrderCtx = { params: { id: string } };
 
-export const PATCH: (req: Request, ctx: RouteCtx) => Promise<Response> = async (req, { params }) => {
-  const id = String(params.id);
+export async function PATCH(req: Request, context: unknown) {
+  const { id } = (context as OrderCtx).params; // ← assertion segura
   if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
 
   try {
@@ -23,7 +22,9 @@ export const PATCH: (req: Request, ctx: RouteCtx) => Promise<Response> = async (
                 tracking: body.shipment.tracking ?? undefined,
                 carrier: body.shipment.carrier ?? undefined,
                 delivered:
-                  typeof body.shipment.delivered === "boolean" ? body.shipment.delivered : undefined,
+                  typeof body.shipment.delivered === "boolean"
+                    ? body.shipment.delivered
+                    : undefined,
               },
               create: {
                 tracking: body.shipment.tracking ?? null,
@@ -44,4 +45,4 @@ export const PATCH: (req: Request, ctx: RouteCtx) => Promise<Response> = async (
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
-};
+}
