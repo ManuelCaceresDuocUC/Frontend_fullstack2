@@ -1,17 +1,12 @@
-// src/app/pago/mercadopago/retorno/page.tsx
-"use client";
-import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import RetornoClient from "./retornoClient";
 
-export default function MPReturn() {
-  const sp = useSearchParams();
-  const router = useRouter();
+export const dynamic = "force-dynamic";
 
-  useEffect(() => {
-    // Mercado Pago devuelve ?external_reference=<orderId> entre otros params
-    const orderId = sp.get("external_reference");
-    router.replace(orderId ? `/gracias/${orderId}` : "/galeria");
-  }, [sp, router]);
-
-  return null;
+export default function Page() {
+  return (
+    <Suspense fallback={<main className="pt-28 md:pt-36 p-6">Procesando pago…</main>}>
+      <RetornoClient />
+    </Suspense>
+  );
 }
