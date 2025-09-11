@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+type Ctx = { params: Record<string, string> }; // ✅
+
+export async function PATCH(req: Request, { params }: Ctx) {
   try {
     const body = (await req.json()) as {
       shipment?: {
@@ -11,7 +13,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         carrier?: string | null;
         delivered?: boolean | null;
       };
-      // otros campos de order si aplican
     };
 
     const data: Prisma.OrderUpdateInput = {
@@ -29,7 +30,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
               create: {
                 tracking: body.shipment.tracking ?? null,
                 carrier: body.shipment.carrier ?? null,
-                // delivered tiene default false, opcional
               },
             },
           }
