@@ -1,9 +1,9 @@
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Client from "./Client";
 
-const norm = (s?: string) => s?.toLowerCase().trim() ?? "";
+const norm = (s?: string | null) => s?.toLowerCase().trim() ?? "";
 
 export default async function Page() {
   const session = await getServerSession(authOptions);
