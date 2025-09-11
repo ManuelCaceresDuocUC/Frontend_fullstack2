@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import fs from "fs/promises";
+import { authOptions } from "@/lib/auth";import fs from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import type { Vehiculo } from "@/types/vehiculo";
