@@ -1,5 +1,6 @@
-'use client';
-import { useCart } from "../stores/cart";
+"use client";
+
+import { useCart } from "@/stores/cart";
 
 type Props = {
   id: string;
@@ -29,7 +30,10 @@ export default function AddToCartButton({
       onClick={onClick}
       disabled={disabled}
       aria-disabled={disabled}
-      className={`rounded-xl px-3 py-2 text-white ${disabled ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"}`}
+      className={`rounded-2xl px-5 py-3 font-semibold ${
+        disabled ? "bg-gray-400 cursor-not-allowed text-white/80"
+                 : "bg-emerald-500 hover:bg-emerald-600 text-white"
+      }`}
     >
       Agregar
     </button>
