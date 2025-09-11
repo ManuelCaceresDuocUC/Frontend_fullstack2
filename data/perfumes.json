@@ -1,0 +1,41 @@
+[
+  {
+    "id": "a96b049a-e2ec-466c-977a-61365134a5f9",
+    "nombre": "9PM azul",
+    "marca": "Afnan",
+    "ml": 100,
+    "precio": 45000,
+    "imagenes": [
+      "perfumes/afnan/afnam-9pm-main.jpg",
+      "perfumes/afnan/42b47c68-10c0-498a-b5bf-ee609ff06c2d-10.webp"
+    ],
+    "imagen": "perfumes/afnan/afnam-9pm-main.jpg",
+    "createdAt": "2025-09-08T18:31:55.897Z"
+  },
+  {
+    "id": "fae89bed-404e-4513-bc22-e5fcea7c8e2e",
+    "nombre": "asdasasd",
+    "marca": "sadsad",
+    "ml": 100,
+    "precio": 30000,
+    "imagenes": [
+      "perfumes/sadsad/e176447c-a2b2-430f-b0c6-c544fbcf764a-afnan-afnan-turathi-hombre-edp-90-ml-h-31769510346788.webp"
+    ],
+    "imagen": "perfumes/sadsad/e176447c-a2b2-430f-b0c6-c544fbcf764a-afnan-afnan-turathi-hombre-edp-90-ml-h-31769510346788.webp",
+    "createdAt": "2025-09-08T18:52:45.277Z",
+    "categoria": "ARABES"
+  },
+  {
+    "id": "1a0e6557-5eee-45e5-b556-e3cf4f8e1bca",
+    "nombre": "Zimaya Fatima Pink",
+    "marca": "afnan",
+    "ml": 100,
+    "precio": 19990,
+    "imagenes": [
+      "perfumes/afnan/6b05352e-9406-4d36-afcf-9578d8f98ec4-fatima.jpg"
+    ],
+    "imagen": "perfumes/afnan/6b05352e-9406-4d36-afcf-9578d8f98ec4-fatima.jpg",
+    "createdAt": "2025-09-08T23:52:56.082Z",
+    "categoria": "ARABES"
+  }
+]

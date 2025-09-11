@@ -27,7 +27,7 @@ export default function PerfilPage() {
           </div>
         </div>
 
-        <a href="/publicar" className="inline-block mb-6 bg-yellow-400 text-black px-5 py-2.5 rounded-2xl font-semibold hover:bg-yellow-300">
+        <a href="/publicar" className="inline-block mb-6 bg-amber-300 text-black px-5 py-2.5 rounded-2xl font-semibold hover:bg-yellow-300">
           Publicar un vehículo
         </a>
 

@@ -1,0 +1,308 @@
+// src/app/checkout/page.tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCart } from "@/store/useCart";
+
+type PaymentMethod = "MERCADOPAGO" | "WEBPAY" | "VENTIPAY";
+
+const fmt = (n: number) =>
+  n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
+
+export default function CheckoutPage() {
+  const router = useRouter();
+  const items = useCart((s) => s.items);
+  const clear = useCart((s) => s.clear);
+
+  // hidratar antes de decidir
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => { setHydrated(true); }, []);
+  useEffect(() => {
+    if (hydrated && items.length === 0) router.replace("/galeria");
+  }, [hydrated, items.length, router]);
+
+  // --------- Totales ----------
+  const [shippingFee] = useState(0);
+  const subtotal = items.reduce((sum, it) => sum + it.price * it.qty, 0);
+  const total = subtotal + shippingFee;
+
+  // --------- Form state ----------
+  const [email, setEmail] = useState("");
+  const [buyerName, setBuyerName] = useState("");
+  const [phone, setPhone] = useState("");
+
+  const [shippingStreet, setStreet] = useState("");
+  const [shippingCity, setCity] = useState("");
+  const [shippingRegion, setRegion] = useState("");
+  const [shippingZip, setZip] = useState("");
+  const [shippingNotes, setNotes] = useState("");
+
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [agree, setAgree] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const disabled =
+    loading ||
+    items.length === 0 ||
+    !agree ||
+    !email ||
+    !buyerName ||
+    !shippingStreet ||
+    !shippingCity ||
+    !shippingRegion ||
+    !paymentMethod;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (disabled) return;
+    try {
+      setLoading(true);
+      const payload = {
+        email,
+        buyerName,
+        phone,
+        address: {
+          street: shippingStreet,
+          city: shippingCity,
+          region: shippingRegion,
+          zip: shippingZip,
+          notes: shippingNotes,
+        },
+        items: items.map((i) => ({ id: i.id, qty: i.qty })),
+        paymentMethod, // <- importante
+      };
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data: { id: string; redirectUrl?: string } = await res.json();
+
+      clear();
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl; // redirección a proveedor
+      } else {
+        router.replace(`/gracias/${data.id}`); // fallback
+      }
+    } catch (err) {
+      alert((err as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!hydrated) return null;
+
+  return (
+    <main className="pt-28 md:pt-36 min-h-screen bg-white text-slate-900">
+      <div className="mx-auto max-w-6xl px-4 md:px-8 pb-16">
+        <h1 className="text-2xl md:text-3xl font-extrabold mb-6">Checkout</h1>
+
+        <div className="grid md:grid-cols-[1fr_380px] gap-8">
+          {/* --------- FORM --------- */}
+          <form onSubmit={submit} className="space-y-6">
+            {/* Pago */}
+            <section className="rounded-2xl border border-slate-200 p-4 md:p-6">
+              <h2 className="font-semibold text-lg mb-4">Pago</h2>
+              <div className="space-y-2">
+                {([
+                  { id: "MERCADOPAGO", label: "Mercado Pago | Débito y Crédito" },
+                  { id: "WEBPAY", label: "WebPay | Crédito" },
+                  { id: "VENTIPAY", label: "VentiPay | Débito y Crédito" },
+                ] as const).map((opt) => (
+                  <label
+                    key={opt.id}
+                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer ${
+                      paymentMethod === opt.id ? "border-blue-500 bg-blue-50" : "border-slate-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      className="accent-blue-600"
+                      checked={paymentMethod === opt.id}
+                      onChange={() => setPaymentMethod(opt.id)}
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium">{opt.label}</div>
+                      <div className="text-xs text-slate-500">
+                        Serás redirigido para completar el pago de forma segura.
+                      </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </section>
+
+            {/* Contacto */}
+            <section className="rounded-2xl border border-slate-200 p-4 md:p-6">
+              <h2 className="font-semibold text-lg mb-4">Contacto</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm mb-1">Correo electrónico</label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                    placeholder="tucorreo@dominio.cl"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm mb-1">Nombre y apellido</label>
+                  <input
+                    required
+                    value={buyerName}
+                    onChange={(e) => setBuyerName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                    placeholder="Juan Pérez"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm mb-1">Teléfono (opcional)</label>
+                  <input
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                    placeholder="+56 9 1234 5678"
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Envío */}
+            <section className="rounded-2xl border border-slate-200 p-4 md:p-6">
+              <h2 className="font-semibold text-lg mb-4">Dirección de envío</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm mb-1">Calle y número</label>
+                  <input
+                    required
+                    value={shippingStreet}
+                    onChange={(e) => setStreet(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                    placeholder="Av. Siempre Viva 742"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">Ciudad</label>
+                  <input
+                    required
+                    value={shippingCity}
+                    onChange={(e) => setCity(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                    placeholder="Santiago"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">Región</label>
+                  <input
+                    required
+                    value={shippingRegion}
+                    onChange={(e) => setRegion(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                    placeholder="Metropolitana"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">Código postal (opcional)</label>
+                  <input
+                    value={shippingZip}
+                    onChange={(e) => setZip(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                    placeholder="0000000"
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm mb-1">Notas (opcional)</label>
+                  <textarea
+                    value={shippingNotes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                    rows={3}
+                    placeholder="Instrucciones para el repartidor, horario, etc."
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Términos + pagar */}
+            <section className="rounded-2xl border border-slate-200 p-4 md:p-6 space-y-4">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={agree}
+                  onChange={(e) => setAgree(e.target.checked)}
+                  className="accent-blue-600"
+                />
+                Estoy de acuerdo con los{" "}
+                <Link href="/terminos" className="underline">
+                  Términos del servicio
+                </Link>
+              </label>
+
+              <button
+                type="submit"
+                disabled={disabled}
+                className={`w-full md:w-auto px-6 py-3 rounded-2xl font-semibold text-white ${
+                  disabled ? "bg-slate-400" : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {loading ? "Procesando..." : "Pagar ahora"}
+              </button>
+            </section>
+          </form>
+
+          {/* --------- RESUMEN --------- */}
+          <aside className="rounded-2xl border border-slate-200 p-4 md:p-6 h-max">
+            <h2 className="font-semibold text-lg mb-4">Resumen</h2>
+
+            <div className="space-y-4 max-h-[50vh] overflow-auto pr-1">
+              {items.map((it) => (
+                <div key={`${it.id}-${it.ml ?? "x"}`} className="flex items-center gap-3">
+                  {it.image ? (
+                    <div className="relative h-16 w-16 rounded overflow-hidden bg-slate-100">
+                      <Image src={it.image} alt={it.name} fill className="object-cover" />
+                    </div>
+                  ) : (
+                    <div className="h-16 w-16 rounded bg-slate-100" />
+                  )}
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">
+                      {it.brand} {it.name}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {it.ml ? `${it.ml} ml · ` : ""}x{it.qty}
+                    </p>
+                  </div>
+                  <div className="text-sm font-semibold">{fmt(it.price * it.qty)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>Subtotal</span>
+                <span>{fmt(subtotal)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Envío</span>
+                <span>{shippingFee ? fmt(shippingFee) : "Por calcular / $0"}</span>
+              </div>
+              <div className="border-t my-2" />
+              <div className="flex justify-between text-base font-extrabold">
+                <span>Total</span>
+                <span>{fmt(total)}</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </main>
+  );
+}

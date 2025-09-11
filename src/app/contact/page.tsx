@@ -65,143 +65,128 @@ export default function ContactPage() {
   };
 
   return (
-    <main className="overflow-x-clip">
-      <div className="bg-gradient-to-b from-rose-950 via-fuchsia-800 to-purple-900 text-white">
-        {/* HERO */}
-        <section className="pt-28 md:pt-36 h-[60vh] md:h-[70vh] flex flex-col items-center justify-center text-center px-4">
-          <motion.h1
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-4xl md:text-6xl font-extrabold mb-4"
-          >
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-rose-300 via-fuchsia-300 to-purple-300">
-              Hablemos
-            </span>
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.3, duration: 0.8 }}
-            className="text-lg md:text-2xl max-w-2xl text-white/90"
-          >
-            Resolvemos dudas y cotizamos sin rodeos.
-          </motion.p>
-        </section>
+    <main className="overflow-hidden">
+      {/* HERO */}
+      <section className="pt-28 md:pt-36 h-[60vh] md:h-[70vh] flex flex-col justify-center items-center text-center px-4 bg-gradient-to-b from-blue-600 to-indigo-800 text-white">
+        <motion.h1
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="text-4xl md:text-6xl font-extrabold mb-4"
+        >
+          Hablemos
+        </motion.h1>
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3, duration: 0.8 }}
+          className="text-lg md:text-2xl max-w-2xl"
+        >
+          Resolvemos dudas y cotizamos sin rodeos.
+        </motion.p>
+      </section>
 
-        {/* CONTACT */}
-        <section className="-mt-px py-16 px-6 md:px-16">
-          <div className="grid md:grid-cols-5 gap-10 max-w-6xl mx-auto">
-            {/* Info */}
-            <div className="md:col-span-2 space-y-6">
-              <h2 className="text-3xl font-bold">Contacto</h2>
-              <p className="text-white/80">
-                Cuéntanos qué necesitas. Respondemos rápido.
-              </p>
+      {/* CONTACT */}
+      <section className="py-16 px-6 md:px-16 bg-white">
+        <div className="grid md:grid-cols-5 gap-10 max-w-6xl mx-auto">
+          {/* Info */}
+          <div className="md:col-span-2 space-y-6">
+            <h2 className="text-3xl font-bold text-gray-800">Contacto</h2>
+            <p className="text-gray-600">
+              Cuéntanos qué necesitas. Respondemos rápido.
+            </p>
 
-              <div className="rounded-2xl p-6 bg-white/5 border border-rose-200/20 backdrop-blur shadow">
-                <div className="flex items-center gap-3 mb-4">
-                  <Mail className="h-5 w-5 text-rose-300" />
-                  <span>contacto@tuvolante.cl</span>
-                </div>
-                <div className="flex items-center gap-3 mb-4">
-                  <Phone className="h-5 w-5 text-rose-300" />
-                  <span>+56 9 1234 5678</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <MapPin className="h-5 w-5 text-rose-300" />
-                  <span>Viña del Mar, Chile</span>
-                </div>
+            <div className="bg-gray-50 p-6 rounded-2xl shadow">
+              <div className="flex items-center gap-3 mb-4">
+                <Mail className="h-5 w-5 text-blue-600" />
+                <span>contacto@mcautohub.cl</span>
+              </div>
+              <div className="flex items-center gap-3 mb-4">
+                <Phone className="h-5 w-5 text-blue-600" />
+                <span>+56 9 1234 5678</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <MapPin className="h-5 w-5 text-blue-600" />
+                <span>Viña del Mar, Chile</span>
               </div>
             </div>
+          </div>
 
-            {/* Form */}
-            <motion.form
-              onSubmit={handleSubmit}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="md:col-span-3 rounded-2xl p-6 bg-white/5 border border-fuchsia-200/20 backdrop-blur shadow space-y-4"
-            >
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm mb-1 text-white/90">Nombre *</label>
-                  <input
-                    value={data.nombre}
-                    onChange={onChange("nombre")}
-                    autoComplete="name"
-                    className="w-full rounded-xl border border-white/20 bg-white/10 text-white placeholder-white/60 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-400/50"
-                    placeholder="Tu nombre"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1 text-white/90">Email *</label>
-                  <input
-                    type="email"
-                    value={data.email}
-                    onChange={onChange("email")}
-                    autoComplete="email"
-                    className="w-full rounded-xl border border-white/20 bg-white/10 text-white placeholder-white/60 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-400/50"
-                    placeholder="tucorreo@dominio.cl"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1 text-white/90">Teléfono</label>
-                  <input
-                    value={data.telefono}
-                    onChange={onChange("telefono")}
-                    autoComplete="tel"
-                    className="w-full rounded-xl border border-white/20 bg-white/10 text-white placeholder-white/60 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-400/50"
-                    placeholder="+56 9 ..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm mb-1 text-white/90">Asunto</label>
-                  <input
-                    value={data.asunto}
-                    onChange={onChange("asunto")}
-                    className="w-full rounded-xl border border-white/20 bg-white/10 text-white placeholder-white/60 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-400/50"
-                    placeholder="Compra, venta, consulta…"
-                  />
-                </div>
-              </div>
-
+          {/* Form */}
+          <motion.form
+            onSubmit={handleSubmit}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="md:col-span-3 bg-gray-50 p-6 rounded-2xl shadow space-y-4"
+          >
+            <div className="grid md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm mb-1 text-white/90">Mensaje *</label>
-                <textarea
-                  value={data.mensaje}
-                  onChange={onChange("mensaje")}
-                  className="w-full min-h-[140px] rounded-xl border border-white/20 bg-white/10 text-white placeholder-white/60 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-rose-500/50 focus:border-rose-400/50"
-                  placeholder="Escribe tu mensaje"
+                <label className="block text-sm text-gray-700 mb-1">Nombre *</label>
+                <input
+                  value={data.nombre}
+                  onChange={onChange("nombre")}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  placeholder="Tu nombre"
                   required
                 />
               </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  value={data.email}
+                  onChange={onChange("email")}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  placeholder="tucorreo@dominio.cl"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Teléfono</label>
+                <input
+                  value={data.telefono}
+                  onChange={onChange("telefono")}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  placeholder="+56 9 ..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">Asunto</label>
+                <input
+                  value={data.asunto}
+                  onChange={onChange("asunto")}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  placeholder="Compra, venta, consulta…"
+                />
+              </div>
+            </div>
 
-              {okMsg && (
-                <p className="text-emerald-300 text-sm" aria-live="polite">
-                  {okMsg}
-                </p>
-              )}
-              {errMsg && (
-                <p className="text-rose-300 text-sm" aria-live="assertive">
-                  {errMsg}
-                </p>
-              )}
+            <div>
+              <label className="block text-sm text-gray-700 mb-1">Mensaje *</label>
+              <textarea
+                value={data.mensaje}
+                onChange={onChange("mensaje")}
+                className="w-full min-h-[140px] rounded-xl border border-gray-300 bg-white px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                placeholder="Escribe tu mensaje"
+                required
+              />
+            </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl font-semibold shadow-lg bg-gradient-to-r from-fuchsia-600 to-rose-600 hover:to-pink-500 transition disabled:opacity-60"
-              >
-                <Send className="h-4 w-4" />
-                {loading ? "Enviando..." : "Enviar mensaje"}
-              </button>
-            </motion.form>
-          </div>
-        </section>
-      </div>
+            {okMsg && <p className="text-green-600 text-sm">{okMsg}</p>}
+            {errMsg && <p className="text-red-600 text-sm">{errMsg}</p>}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex items-center gap-2 bg-yellow-400 text-black px-6 py-3 rounded-2xl font-semibold shadow-lg hover:bg-yellow-300 transition disabled:opacity-60"
+            >
+              <Send className="h-4 w-4" />
+              {loading ? "Enviando..." : "Enviar mensaje"}
+            </button>
+          </motion.form>
+        </div>
+      </section>
     </main>
   );
 }

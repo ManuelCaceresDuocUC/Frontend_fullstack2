@@ -1,39 +1,52 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Base corporativa */
+:root{
+  --bg:#ffffff;            /* fondo */
+  --text:#0f172a;          /* texto */
+  --muted:#64748b;         /* texto secundario */
+  --border:#e2e8f0;        /* bordes */
+  --primary:#dc2626;       /* rojo corporativo */
+  --primary-600:#b91c1c;   /* hover/active */
 }
 
-@layer theme {
-  :root {
-    --color-blue-600:  #482ce6;   /* antes azul del hero */
-    --color-indigo-800:#31114e;   /* fin del gradiente */
-    --color-yellow-400:#a088ff;   /* CTA */
-  }
+/* Tailwind v4: tokens (no :root aquí) */
+@theme{
+  /* Mapea clases existentes a la nueva paleta */
+  --color-blue-600: var(--primary); /* cualquier 'text-blue-600' ahora es rojo */
+  --color-indigo-800:#0f172a;       /* fondos oscuros sobrios */
+  --color-amber-300:#f59e0b;        /* acento cálido para CTA */
+
+  /* Opcional: habilita 'bg-primary', 'text-primary' */
+  --color-primary: var(--primary);
+  --color-primary-600: var(--primary-600);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0b1220; --text:#e5e7eb; --border:#1f2937; }
 }
 
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
 
-body { font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif; }
-@layer components {
+/* Componentes */
+@layer components{
   .btn{
     display:inline-flex; align-items:center; justify-content:center;
     padding:.75rem 1.5rem; border-radius:1rem; font-weight:600;
-    transition: background-color .2s, box-shadow .2s, color .2s;
+    transition:background-color .2s, box-shadow .2s, color .2s;
   }
-  .btn-primary{ color:#fff; background:#322ce6; }
-  .btn-primary:hover{ background:#4d4aff; box-shadow:0 0 30px 0 rgba(98, 90, 255, 0.25); }
-
+  .btn-primary{
+    color:#fff; background:var(--primary);
+  }
+  .btn-primary:hover{
+    background:var(--primary-600); box-shadow:0 6px 20px -8px rgba(220,38,38,.45);
+  }
   .btn-ghost{
-    color:#fff; background:rgba(255,255,255,.10);
-    border:1px solid rgba(255,255,255,.20);
+    color:var(--text); background:#fff; border:1px solid var(--border);
   }
-  .btn-ghost:hover{ background:rgba(255,255,255,.15); }
+  .btn-ghost:hover{ background:#f8fafc; }
 }

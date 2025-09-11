@@ -38,7 +38,7 @@ export default function PublicarPage() {
             <p className="text-xs text-white/70 mt-1">Se guardan en <code>/public/gallery</code>.</p>
           </div>
 
-          <button disabled={loading} className="bg-yellow-400 text-black py-3 rounded-2xl font-semibold hover:bg-yellow-300 disabled:opacity-60">
+          <button disabled={loading} className="bg-amber-300 text-black py-3 rounded-2xl font-semibold hover:bg-yellow-300 disabled:opacity-60">
             {loading ? "Publicando…" : "Publicar"}
           </button>
         </form>

@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `Perfume` ADD COLUMN `category` ENUM('NICHO', 'ARABES', 'DISENADOR', 'OTROS') NOT NULL DEFAULT 'OTROS';

@@ -1,5 +1,5 @@
+// components/VehicleCard.tsx
 "use client";
-
 import Image from "next/image";
 import Link from "next/link";
 
@@ -7,43 +7,65 @@ export type Vehiculo = {
   id: string;
   marca: string;
   modelo: string;
-  anio: number;
+  anio?: number;
+  ml?: number;
   precio: number;
-  tipo: "suv" | "sedan" | "hatchback" | "pickup" | "4x4" | "motocicleta";
-  combustible: "gasolina" | "diesel" | "hibrido" | "electrico";
-  transmision: "manual" | "automatica" | "cvt";
-  cilindradaCc?: number;     // <-- nuevo
+tipo?: "suv"|"sedan"|"hatchback"|"pickup"|"4x4"|"motocicleta"|"NICHO"|"ARABES"|"DISEÑADOR"|"OTROS";
+  combustible?: "gasolina" | "diesel" | "hibrido" | "electrico";
+  transmision?: "manual" | "automatica" | "cvt";
   imagen: string;
 };
+
 const fmt = (n: number) =>
   n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
-export default function VehicleCard({ v }: { v: Vehiculo }) {
-  const asunto = encodeURIComponent(`Cotización ${v.marca} ${v.modelo} ${v.anio}`);
-  return (
-   <div className="rounded-2xl border border-white/15 bg-white/10 backdrop-blur shadow-lg overflow-hidden">
-  <div className="relative w-full h-52">
-    <Image src={v.imagen} alt={`${v.marca} ${v.modelo}`} fill className="object-cover" />
-    {/* oscurece un poco la foto para que el texto resalte */}
-    <div className="absolute inset-0 bg-black/20 pointer-events-none" />
-  </div>
-      <div className="p-4 flex-1 flex flex-col">
-        <h3 className="text-lg font-semibold text-gray-900">
-          {v.marca} {v.modelo} <span className="text-gray-500">{v.anio}</span>
-        </h3>
-        <p className="mt-1 text-blue-700 font-bold">{fmt(v.precio)}</p>
+export default function VehicleCard({ v }: { v?: Vehiculo }) {
+  if (!v) return null;
+  const isPerfume = v.ml != null || v.anio == null || v.anio === 0;
 
-        <div className="mt-2 flex flex-wrap gap-2 text-xs">
-          <span className="px-2 py-1 rounded-full bg-yellow border border-gray-200">{v.tipo.toUpperCase()}</span>
-          <span className="px-2 py-1 rounded-full bg-yellow border border-gray-200">{v.combustible}</span>
-          <span className="px-2 py-1 rounded-full bg-yellow border border-gray-200">{v.transmision}</span>
+  return (
+    <div className="group rounded-2xl border border-neutral-200 bg-white text-neutral-900 shadow-sm overflow-hidden transition hover:shadow-md">
+      <div className="relative w-full h-52">
+        <Image src={v.imagen} alt={`${v.marca} ${v.modelo}`} fill className="object-cover" />
+        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent pointer-events-none" />
+      </div>
+
+      <div className="p-5 flex-1 flex flex-col gap-2">
+        <h3 className="text-lg font-semibold leading-tight">
+          {v.marca} {v.modelo}
+          {!isPerfume && v.anio != null && <span className="text-neutral-500 font-normal"> {v.anio}</span>}
+        </h3>
+
+        <p className="text-emerald-700 font-extrabold">{fmt(v.precio)}</p>
+
+        <div className="mt-1 flex flex-wrap gap-2 text-xs">
+          {isPerfume ? (
+            <>
+              {v.ml != null && (
+                <span className="px-2 py-1 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">
+                  {v.ml} ml
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              {v.tipo && <span className="px-2 py-1 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">{v.tipo.toUpperCase()}</span>}
+              {v.combustible && <span className="px-2 py-1 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">{v.combustible}</span>}
+              {v.transmision && <span className="px-2 py-1 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">{v.transmision}</span>}
+            </>
+          )}
         </div>
 
         <Link
-          href={`/contact?asunto=${asunto}`}
+          href={isPerfume ? `/perfume/${v.id}` : `/producto/${v.id}`}
           className="mt-4 inline-block bg-yellow-400 text-black px-4 py-2 rounded-2xl font-semibold shadow hover:bg-yellow-300 text-center"
+          aria-label={
+            isPerfume
+              ? `Ver perfume ${v.marca} ${v.modelo}${v.ml ? ` ${v.ml} ml` : ""}`
+              : `Cotizar ${v.marca} ${v.modelo}${v.anio ? ` ${v.anio}` : ""}`
+          }
         >
-          Cotizar
+          {isPerfume ? "Ver perfume" : "Cotizar"}
         </Link>
       </div>
     </div>
