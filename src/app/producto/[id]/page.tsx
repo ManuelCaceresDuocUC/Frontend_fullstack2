@@ -1,3 +1,4 @@
+// app/producto/[id]/page.tsx
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -10,10 +11,13 @@ type ApiVehiculo = Vehiculo;
 type ApiError = { error: string };
 
 async function getVehiculo(id: string): Promise<Vehiculo | null> {
-  const h = await headers();
+  const h = await headers(); // <- aquí
   const host = h.get("host")!;
-  const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
-const url = `${proto}://${host}/api/perfumes?id=${encodeURIComponent(id)}`;
+  const proto =
+    h.get("x-forwarded-proto") ??
+    (process.env.NODE_ENV === "production" ? "https" : "http");
+
+  const url = `${proto}://${host}/api/perfumes?id=${encodeURIComponent(id)}`;
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) return null;
   const data = (await res.json()) as ApiVehiculo | ApiError;
@@ -21,15 +25,19 @@ const url = `${proto}://${host}/api/perfumes?id=${encodeURIComponent(id)}`;
   return data;
 }
 
-export default async function ProductoPage({ params }: { params: { id: string } }) {
-  const v = await getVehiculo(params.id);
+
+export default async function ProductoPage(
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const v = await getVehiculo(id);
   if (!v) notFound();
 
   const images = Array.isArray(v.imagenes) && v.imagenes.length ? v.imagenes : [v.imagen];
 
   return (
-<main className="pt-28 md:pt-36 pb-28 md:pb-40 bg-neutral-50 min-h-screen">
-          <div className="px-6 md:px-10 max-w-7xl mx-auto pt-4 pb-7">
+    <main className="pt-28 md:pt-36 pb-28 md:pb-40 bg-neutral-50 min-h-screen">
+      <div className="px-6 md:px-10 max-w-7xl mx-auto pt-4 pb-7">
         <nav className="mb-5 text-sm text-neutral-600">
           <Link href="/galeria" className="hover:underline">← Volver a galería</Link>
         </nav>
@@ -44,12 +52,10 @@ export default async function ProductoPage({ params }: { params: { id: string } 
         </header>
 
         <div className="grid gap-10 lg:grid-cols-5">
-          {/* Galería con carrusel y zoom */}
           <section className="lg:col-span-3">
             <ProductMedia images={images} title={`${v.marca} ${v.modelo}`} />
           </section>
 
-          {/* Caja info con más padding */}
           <aside className="lg:col-span-2">
             <div className="sticky top-28 space-y-6 rounded-2xl border bg-white p-6 md:p-8 shadow-sm">
               <div>
@@ -96,15 +102,14 @@ export default async function ProductoPage({ params }: { params: { id: string } 
           </aside>
         </div>
 
-<section className="mt-12 mb-20 md:mb-28">
-              <h2 className="text-lg font-semibold mb-3">Descripción</h2>
+        <section className="mt-12 mb-20 md:mb-28">
+          <h2 className="text-lg font-semibold mb-3">Descripción</h2>
           <p className="text-neutral-700 leading-relaxed">
             {v.marca} {v.modelo} {v.anio}. Excelente estado. Listo para cotizar y agendar visita.
           </p>
         </section>
       </div>
 
-      {/* Barra fija móvil */}
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white/90 backdrop-blur p-3 md:hidden">
         <div className="max-w-7xl mx-auto px-3 flex items-center gap-3">
           <div className="font-bold">${v.precio.toLocaleString("es-CL")}</div>
@@ -116,7 +121,7 @@ export default async function ProductoPage({ params }: { params: { id: string } 
           </Link>
         </div>
       </div>
-<div className="h-24 md:hidden" />
+      <div className="h-24 md:hidden" />
     </main>
   );
 }
