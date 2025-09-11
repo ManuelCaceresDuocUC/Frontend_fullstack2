@@ -4,7 +4,6 @@ import { prisma } from "@/lib/prisma";
 import ProductGallery from "@/components/ProductGallery";
 import AddToCartButton from "@/components/AddToCartButton";
 
-
 export const dynamic = "force-dynamic";
 
 const S3_BASE = (process.env.S3_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_S3_BASE ?? "").replace(/\/+$/, "");
@@ -13,10 +12,12 @@ const resolveImg = (s?: string | null) =>
 const fmt = (n: number) =>
   n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
-export default async function Page({ params }: { params: { id: string } }) {
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
   const perfume = await prisma.perfume.findUnique({
-    where: { id: params.id },
-    include: { stock: true }, // <- correcto
+    where: { id },
+    include: { stock: true },
   });
   if (!perfume) notFound();
 
@@ -51,35 +52,24 @@ export default async function Page({ params }: { params: { id: string } }) {
             {qty > 0 ? `Stock: ${qty} unidades` : "Sin stock"}
           </p>
 
-          
-  <div className="mt-6 flex gap-3">
-  <AddToCartButton
-    id={p.id}
-    name={p.nombre}
-    brand={p.marca}
-    price={p.precio}
-    ml={p.ml}
-    image={imgs[0]}
-    disabled={qty <= 0}
-  />
-  <a
-    href="/galeria"
-    className="px-5 py-3 rounded-2xl border border-white/20 hover:bg-white/10"
-  >
-    Volver
-  </a>
-</div>
-
-
-          
+          <div className="mt-6 flex gap-3">
+            <AddToCartButton
+              id={p.id}
+              name={p.nombre}
+              brand={p.marca}
+              price={p.precio}
+              ml={p.ml}
+              image={imgs[0] ?? fallback}
+              disabled={qty <= 0}
+            />
+            <a href="/galeria" className="px-5 py-3 rounded-2xl border border-white/20 hover:bg-white/10">
+              Volver
+            </a>
+          </div>
 
           <div className="mt-6 text-sm text-white/70 space-y-1">
-            <p>
-              <b>ID:</b> {p.id}
-            </p>
-            <p>
-              <b>Creado:</b> {new Date(p.createdAt).toLocaleString("es-CL")}
-            </p>
+            <p><b>ID:</b> {p.id}</p>
+            <p><b>Creado:</b> {new Date(p.createdAt).toLocaleString("es-CL")}</p>
           </div>
         </div>
       </div>
