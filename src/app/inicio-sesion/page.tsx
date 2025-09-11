@@ -32,9 +32,12 @@ export default function SignInPage() {
   className="w-full rounded-2xl border border-white/30 bg-white/10 py-3 hover:bg-white/20 transition"
 >            Continuar con Google
 </button>
-          <a href="/api/auth/signin/github" className="inline-flex justify-center items-center w-full rounded-2xl border border-white/30 bg-white/10 py-3 hover:bg-white/20 transition">
-            Continuar con GitHub
-          </a>
+          <Link
+        href="/api/auth/signin/github"
+        className="inline-flex items-center rounded-xl px-4 py-2 bg-black text-white"
+      >
+        Ingresar con GitHub
+      </Link>
         </div>
 
         {/* Divider */}
