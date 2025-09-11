@@ -1,28 +1,19 @@
-"use client";
-import { useCart } from "@/stores/cart";
+// src/components/AddToCartButton.tsx
+'use client';
+import { useCart } from '@/store/useCart';
 
 type Props = {
-  id: string;
-  name: string;
-  brand: string;
-  price: number;
-  ml: number;
-  image?: string;
-  disabled?: boolean;
+  id: string; name: string; brand: string; price: number; ml: number; image?: string; disabled?: boolean;
 };
 
-export default function AddToCartButton({
-  id, name, brand, price, ml, image, disabled = false,
-}: Props) {
-  const add = useCart((s) => s.add);
-  const open = useCart((s) => s.open);
+export default function AddToCartButton({ id, name, brand, price, ml, image, disabled=false }: Props) {
+  const add  = useCart(s => s.add);
+  const open = useCart(s => s.open);
 
   const onClick = () => {
     if (disabled) return;
     add({ id, name, brand, ml, price, image, qty: 1 });
     open();
-    // Debug opcional:
-    // console.log("Cart items:", useCart.getState().items);
   };
 
   return (
@@ -31,10 +22,7 @@ export default function AddToCartButton({
       onClick={onClick}
       disabled={disabled}
       aria-disabled={disabled}
-      className={`rounded-2xl px-5 py-3 font-semibold ${
-        disabled ? "bg-gray-400 cursor-not-allowed text-white/80"
-                 : "bg-emerald-500 hover:bg-emerald-600 text-white"
-      }`}
+      className={`rounded-xl px-3 py-2 text-white ${disabled ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
     >
       Agregar
     </button>

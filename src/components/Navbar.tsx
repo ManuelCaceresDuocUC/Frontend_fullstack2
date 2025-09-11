@@ -1,4 +1,5 @@
 "use client";
+import { useCart } from "@/stores/cart";
 
 import Link from "next/link";
 import { useRef, useState } from "react";
