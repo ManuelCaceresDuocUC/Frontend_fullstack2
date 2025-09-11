@@ -1,10 +1,12 @@
+// src/app/api/auth/[...nextauth]/route.ts
 export const runtime = "nodejs";
 
-import NextAuth, { type NextAuthOptions } from "next-auth";
+import NextAuth from "next-auth";
+import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import type { JWT } from "next-auth/jwt";
 
-export const authOptions: NextAuthOptions = {
+const authOptions: NextAuthOptions = {
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_ID!,
@@ -16,7 +18,7 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, account, user }): Promise<JWT> {
       if (account?.access_token) token.accessToken = account.access_token;
       if (user?.id) token.uid = user.id;
-      if (!token.role) token.role = "USER";
+      token.role ??= "USER";
       return token;
     },
     async session({ session, token }) {
@@ -32,4 +34,3 @@ export const authOptions: NextAuthOptions = {
 
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
-
