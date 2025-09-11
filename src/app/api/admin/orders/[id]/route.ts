@@ -1,42 +1,48 @@
 // src/app/api/admin/orders/[id]/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
-type OrderCtx = { params: { id: string } };
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export async function PATCH(req: Request, context: unknown) {
-  const { id } = (context as OrderCtx).params; // ← assertion segura
-  if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
+type Params = { id: string };
+type ShipmentPayload = Partial<{
+  tracking: string | null;
+  trackingCode: string | null;
+  carrier: string | null;
+  delivered: boolean | null; // quita si no existe en tu schema
+}>;
 
+export async function PATCH(req: NextRequest, { params }: { params: Params }) {
   try {
-    const body = (await req.json()) as {
-      shipment?: { tracking?: string | null; carrier?: string | null; delivered?: boolean | null };
-    };
+    const body = (await req.json()) as { shipment?: ShipmentPayload };
+    const sp = body.shipment;
 
-    const data: Prisma.OrderUpdateInput = {
-      shipment: body.shipment
-        ? {
+    const tracking = sp?.tracking ?? sp?.trackingCode ?? null;
+
+    const data: Prisma.OrderUpdateInput = sp
+      ? {
+          shipment: {
             upsert: {
               update: {
-                tracking: body.shipment.tracking ?? undefined,
-                carrier: body.shipment.carrier ?? undefined,
-                delivered:
-                  typeof body.shipment.delivered === "boolean"
-                    ? body.shipment.delivered
-                    : undefined,
+                tracking: tracking ?? undefined,
+                carrier: sp.carrier ?? undefined,
+                // elimina esta línea si tu modelo Shipment no tiene 'delivered'
+                delivered: typeof sp.delivered === "boolean" ? sp.delivered : undefined,
               },
               create: {
-                tracking: body.shipment.tracking ?? null,
-                carrier: body.shipment.carrier ?? null,
+                tracking,
+                carrier: sp.carrier ?? null,
+                // idem 'delivered' aquí si aplica
               },
             },
-          }
-        : undefined,
-    };
+          },
+        }
+      : {};
 
     const updated = await prisma.order.update({
-      where: { id },
+      where: { id: params.id },
       data,
       include: { items: true, payment: true, shipment: true },
     });
