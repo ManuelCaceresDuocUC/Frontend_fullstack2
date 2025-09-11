@@ -9,46 +9,37 @@ export const dynamic = "force-dynamic";
 type Params = { id: string };
 type ShipmentPayload = Partial<{
   tracking: string | null;
-  trackingCode: string | null;
   carrier: string | null;
-  delivered: boolean | null; // quita si no existe en tu schema
+  delivered: boolean | null;
 }>;
 
 export async function PATCH(req: NextRequest, { params }: { params: Params }) {
-  try {
-    const body = (await req.json()) as { shipment?: ShipmentPayload };
-    const sp = body.shipment;
+  const body = (await req.json()) as { shipment?: ShipmentPayload };
+  const sp = body.shipment;
 
-    const tracking = sp?.tracking ?? sp?.trackingCode ?? null;
-
-    const data: Prisma.OrderUpdateInput = sp
-      ? {
-          shipment: {
-            upsert: {
-              update: {
-                tracking: tracking ?? undefined,
-                carrier: sp.carrier ?? undefined,
-                // elimina esta línea si tu modelo Shipment no tiene 'delivered'
-                delivered: typeof sp.delivered === "boolean" ? sp.delivered : undefined,
-              },
-              create: {
-                tracking,
-                carrier: sp.carrier ?? null,
-                // idem 'delivered' aquí si aplica
-              },
+  const data: Prisma.OrderUpdateInput = sp
+    ? {
+        shipment: {
+          upsert: {
+            update: {
+              tracking: sp.tracking ?? undefined,
+              carrier: sp.carrier ?? undefined,
+              delivered: typeof sp.delivered === "boolean" ? sp.delivered : undefined,
+            },
+            create: {
+              tracking: sp.tracking ?? null,
+              carrier: sp.carrier ?? null,
+              delivered: sp.delivered ?? false,
             },
           },
-        }
-      : {};
+        },
+      }
+    : {};
 
-    const updated = await prisma.order.update({
-      where: { id: params.id },
-      data,
-      include: { items: true, payment: true, shipment: true },
-    });
-
-    return NextResponse.json(updated);
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
-  }
+  const updated = await prisma.order.update({
+    where: { id: params.id },
+    data,
+    include: { items: true, payment: true, shipment: true },
+  });
+  return NextResponse.json(updated);
 }

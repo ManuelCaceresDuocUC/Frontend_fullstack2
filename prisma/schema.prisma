@@ -79,7 +79,6 @@ enum PaymentMethod {
   SERVIPAG
   MANUAL
 }
-enum ShipmentStatus { PENDING PREPARING SHIPPED DELIVERED CANCELLED }
 
 model Order {
   id        String  @id @default(cuid())
@@ -142,14 +141,14 @@ model Payment {
 }
 
 model Shipment {
-  id           String         @id @default(cuid())
-  order        Order          @relation(fields: [orderId], references: [id])
-  orderId      String         @unique
-  trackingCode String?
-  carrier      String?
-  eta          DateTime?
-  cost         Int?
-  status       ShipmentStatus @default(PENDING) // ✅
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  id        String   @id @default(cuid())
+  orderId   String   @unique
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  carrier   String?
+  tracking  String?
+  delivered Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("shipments")
 }
