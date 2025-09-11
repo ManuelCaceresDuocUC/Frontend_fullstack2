@@ -1,11 +1,14 @@
 // src/app/api/admin/orders/[id]/route.ts
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
-type Ctx = { params: Record<string, string> }; // ✅
+export const runtime = "nodejs";        // Prisma no corre en edge
+export const dynamic = "force-dynamic"; // evita caché en mutaciones
 
-export async function PATCH(req: Request, { params }: Ctx) {
+type Params = { id: string };
+
+export async function PATCH(req: NextRequest, { params }: { params: Params }) {
   try {
     const body = (await req.json()) as {
       shipment?: {
@@ -30,6 +33,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
               create: {
                 tracking: body.shipment.tracking ?? null,
                 carrier: body.shipment.carrier ?? null,
+                // delivered se crea por default en el schema si aplica
               },
             },
           }
