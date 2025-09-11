@@ -326,7 +326,7 @@ export default function Page() {
           <p className="text-white/80">No se encontraron perfumes con esos filtros.</p>
         ) : (
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {lista.map((v: { id: string }) => (
+            {lista.map((v: Item) => (
               <VehicleCard key={v.id} v={v} />
             ))}
           </div>
