@@ -5,8 +5,10 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function GET(req: Request) {
+  // /api/orders/123 -> "123"
+  const id = req.url.split("/").pop()?.split("?")[0] ?? "";
+  if (!id) return NextResponse.json({ error: "bad id" }, { status: 400 });
 
   const order = await prisma.order.findUnique({
     where: { id },
