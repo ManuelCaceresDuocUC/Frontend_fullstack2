@@ -1,27 +1,34 @@
 // src/lib/webpay.ts
-import {
-  WebpayPlus,
-  Options,
-  Environment,
-  IntegrationApiKeys,
-  IntegrationCommerceCodes,
-} from "transbank-sdk";
+import { WebpayPlus, Options, Environment, IntegrationApiKeys, IntegrationCommerceCodes } from "transbank-sdk";
 
-// Usa integración por defecto; solo usa prod si TODO está configurado
-const isProd = process.env.WEBPAY_ENV === "production"
-  && !!process.env.WEBPAY_COMMERCE_CODE
-  && !!process.env.WEBPAY_API_KEY;
+function env(key: string) {
+  return process.env[key]?.trim();
+}
 
-const options = isProd
+// Permite WEBPAY_* y también TBK_* como fallback
+const ENV_RAW = (env("WEBPAY_ENV") || env("TBK_ENV") || "integration").toLowerCase();
+const IS_PROD = ENV_RAW === "prod" || ENV_RAW === "production";
+
+const PROD_COMMERCE = env("WEBPAY_COMMERCE_CODE") || env("TBK_COMMERCE_CODE");
+const PROD_API_KEY  = env("WEBPAY_API_KEY")       || env("TBK_API_KEY_SECRET");
+
+const options = IS_PROD
   ? new Options(
-      process.env.WEBPAY_COMMERCE_CODE!, // entregado por Transbank
-      process.env.WEBPAY_API_KEY!,       // entregado por Transbank
+      // Producción: debes usar tu código y secret reales
+      assertVar(PROD_COMMERCE, "WEBPAY_COMMERCE_CODE/TBK_COMMERCE_CODE"),
+      assertVar(PROD_API_KEY,  "WEBPAY_API_KEY/TBK_API_KEY_SECRET"),
       Environment.Production
     )
   : new Options(
-      IntegrationCommerceCodes.WEBPAY_PLUS, // 597055555532
-      IntegrationApiKeys.WEBPAY,            // api key de integración
+      // Integración oficial
+      IntegrationCommerceCodes.WEBPAY_PLUS,
+      IntegrationApiKeys.WEBPAY,
       Environment.Integration
     );
+
+function assertVar<T>(v: T | undefined, name: string): T {
+  if (!v) throw new Error(`Falta la variable de entorno ${name} para Webpay (producción).`);
+  return v;
+}
 
 export const webpayTx = new WebpayPlus.Transaction(options);
