@@ -2,18 +2,26 @@
 import {
   WebpayPlus,
   Options,
+  Environment,
   IntegrationApiKeys,
   IntegrationCommerceCodes,
-  Environment,
 } from "transbank-sdk";
 
-const ENV = (process.env.WEBPAY_ENV ?? "INTEGRATION").toUpperCase();
-const commerce = process.env.WEBPAY_COMMERCE_CODE ?? IntegrationCommerceCodes.WEBPAY_PLUS;
-const apiKey = process.env.WEBPAY_API_KEY ?? IntegrationApiKeys.WEBPAY;
+// Usa integración por defecto; solo usa prod si TODO está configurado
+const isProd = process.env.WEBPAY_ENV === "production"
+  && !!process.env.WEBPAY_COMMERCE_CODE
+  && !!process.env.WEBPAY_API_KEY;
 
-const options =
-  ENV === "PRODUCTION"
-    ? new Options(commerce, apiKey, Environment.Production)
-    : new Options(IntegrationCommerceCodes.WEBPAY_PLUS, IntegrationApiKeys.WEBPAY, Environment.Integration);
+const options = isProd
+  ? new Options(
+      process.env.WEBPAY_COMMERCE_CODE!, // entregado por Transbank
+      process.env.WEBPAY_API_KEY!,       // entregado por Transbank
+      Environment.Production
+    )
+  : new Options(
+      IntegrationCommerceCodes.WEBPAY_PLUS, // 597055555532
+      IntegrationApiKeys.WEBPAY,            // api key de integración
+      Environment.Integration
+    );
 
 export const webpayTx = new WebpayPlus.Transaction(options);

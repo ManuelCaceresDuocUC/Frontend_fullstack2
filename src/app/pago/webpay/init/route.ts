@@ -1,4 +1,4 @@
-// app/pago/webpay/init/route.ts
+// src/app/api/payments/webpay/init/route.ts
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
@@ -7,47 +7,41 @@ import { webpayTx } from "@/lib/webpay";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type Body = { orderId?: string };
+type OrderItem = { unitPrice: number; qty: number } & Partial<{ price: number }>;
+
 export async function POST(req: Request) {
   try {
-    const { orderId } = (await req.json()) as { orderId: string };
+    const { orderId } = (await req.json()) as Body;
+    if (!orderId) return NextResponse.json({ error: "orderId requerido" }, { status: 400 });
 
-    if (!orderId) {
-      return NextResponse.json({ error: "orderId requerido" }, { status: 400 });
-    }
-
+    // Carga la orden y calcula monto (usa price si existe, si no unitPrice)
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { payment: true, items: true },
+      include: { items: true },
     });
-    if (!order) return NextResponse.json({ error: "Orden no existe" }, { status: 404 });
-    if (!order.total || order.total <= 0) {
-      return NextResponse.json({ error: "Total inválido" }, { status: 400 });
-    }
+    if (!order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
 
-    // Asegura registro de Payment
-    await prisma.payment.upsert({
-      where: { orderId },
-      update: { method: "WEBPAY", status: "INITIATED", amount: order.total },
-      create: {
-        orderId,
-        method: "WEBPAY",
-        status: "INITIATED",
-        amount: order.total,
-      },
-    });
+    const amountRaw = order.items.reduce((s, it: OrderItem) => s + (it.price ?? it.unitPrice) * it.qty, 0);
+    // Webpay requiere entero en CLP
+    const amount = Math.max(1, Math.round(amountRaw));
 
+    // Return URL absoluta (POST de Webpay -> tu /pago/webpay/retorno)
     const h = await headers();
     const host = h.get("host")!;
-    const proto = h.get("x-forwarded-proto") ?? "https";
+    const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
     const returnUrl = `${proto}://${host}/pago/webpay/retorno`;
 
-    // En Webpay usamos buy_order = orderId, session_id = orderId (simple y trazable)
-    const { token, url } = await webpayTx.create(orderId, orderId, order.total, returnUrl);
+    // Crea transacción
+    const resp = await webpayTx.create(order.id, order.id, amount, returnUrl);
 
-    // Devuelve datos para que el cliente haga POST (form) a `url` con `token_ws`
-    return NextResponse.json({ url, token, token_ws: token });
-  } catch (e) {
-    console.error("WEBPAY INIT error:", e);
-    return NextResponse.json({ error: "Error iniciando Webpay" }, { status: 500 });
+    // Devuelve URL para redirigir al formulario de Webpay
+    return NextResponse.json({
+      url: `${resp.url}?token_ws=${resp.token}`,
+      token: resp.token,
+    });
+  } catch (err) {
+    console.error("WEBPAY INIT ERROR:", err);
+    return NextResponse.json({ error: "No se pudo iniciar el pago" }, { status: 500 });
   }
 }
