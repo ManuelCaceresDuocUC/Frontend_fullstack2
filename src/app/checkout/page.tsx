@@ -1,7 +1,7 @@
 // src/app/checkout/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -12,12 +12,25 @@ type PaymentMethod = "MERCADOPAGO" | "WEBPAY" | "VENTIPAY";
 const fmt = (n: number) =>
   n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
+const STORAGE_KEY = "checkout:v1";
+type SavedForm = {
+  email: string;
+  buyerName: string;
+  phone: string;
+  shippingStreet: string;
+  shippingCity: string;
+  shippingRegion: string;
+  shippingZip: string;
+  shippingNotes: string;
+  paymentMethod: PaymentMethod | null;
+};
+
 export default function CheckoutPage() {
   const router = useRouter();
   const items = useCart((s) => s.items);
   const clear = useCart((s) => s.clear);
 
-  // hidratar antes de decidir
+  // hidratar
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => { setHydrated(true); }, []);
   useEffect(() => {
@@ -43,6 +56,46 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [agree, setAgree] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // --------- Cargar guardado una sola vez ----------
+  const loadedRef = useRef(false);
+  useEffect(() => {
+    if (!hydrated || loadedRef.current) return;
+    loadedRef.current = true;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw) as Partial<SavedForm>;
+      if (s.email) setEmail(s.email);
+      if (s.buyerName) setBuyerName(s.buyerName);
+      if (s.phone) setPhone(s.phone ?? "");
+      if (s.shippingStreet) setStreet(s.shippingStreet);
+      if (s.shippingCity) setCity(s.shippingCity);
+      if (s.shippingRegion) setRegion(s.shippingRegion);
+      if (s.shippingZip) setZip(s.shippingZip ?? "");
+      if (s.shippingNotes) setNotes(s.shippingNotes ?? "");
+      if (s.paymentMethod) setPaymentMethod(s.paymentMethod);
+    } catch {}
+  }, [hydrated]);
+
+  // --------- Guardar en localStorage (debounce ligero) ----------
+  useEffect(() => {
+    if (!hydrated) return;
+    const toSave: SavedForm = {
+      email, buyerName, phone,
+      shippingStreet, shippingCity, shippingRegion, shippingZip, shippingNotes,
+      paymentMethod,
+    };
+    const t = setTimeout(() => {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave)); } catch {}
+    }, 200);
+    return () => clearTimeout(t);
+  }, [
+    hydrated,
+    email, buyerName, phone,
+    shippingStreet, shippingCity, shippingRegion, shippingZip, shippingNotes,
+    paymentMethod,
+  ]);
 
   const disabled =
     loading ||
@@ -72,7 +125,7 @@ export default function CheckoutPage() {
           notes: shippingNotes,
         },
         items: items.map((i) => ({ id: i.id, qty: i.qty })),
-        paymentMethod, // <- importante
+        paymentMethod,
       };
       const res = await fetch("/api/checkout", {
         method: "POST",
@@ -84,9 +137,9 @@ export default function CheckoutPage() {
 
       clear();
       if (data.redirectUrl) {
-        window.location.href = data.redirectUrl; // redirección a proveedor
+        window.location.href = data.redirectUrl;
       } else {
-        router.replace(`/gracias/${data.id}`); // fallback
+        router.replace(`/gracias/${data.id}`);
       }
     } catch (err) {
       alert((err as Error).message);
