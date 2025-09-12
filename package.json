@@ -24,6 +24,7 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "swr": "^2.3.6",
+    "transbank-sdk": "^6.1.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
