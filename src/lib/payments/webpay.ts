@@ -1,27 +1,50 @@
 // src/lib/payments/webpay.ts
-const HOST =
-  (process.env.TBK_ENV ?? "").toLowerCase() === "prod"
-    ? "https://webpay3g.transbank.cl"
-    : "https://webpay3gint.transbank.cl";
 
-function tbkHeaders() {
-  const id = process.env.TBK_API_KEY_ID!;
-  const secret = process.env.TBK_API_KEY_SECRET!;
-  if (!id || !secret) throw new Error("Faltan TBK_API_KEY_ID/TBK_API_KEY_SECRET");
-  return {
-    "Content-Type": "application/json",
-    "Tbk-Api-Key-Id": id,       // Commerce Code
-    "Tbk-Api-Key-Secret": secret,
-  };
+const isProd = /^(prod|production|live)$/i.test(process.env.TBK_ENV ?? "");
+const HOST = isProd
+  ? "https://webpay3g.transbank.cl"
+  : "https://webpay3gint.transbank.cl";
+
+type TBKHeaders = {
+  "Content-Type": "application/json";
+  "Tbk-Api-Key-Id": string;     // Commerce Code
+  "Tbk-Api-Key-Secret": string; // API Key Secret
+};
+
+function tbkHeaders(): TBKHeaders {
+  const id = process.env.TBK_API_KEY_ID ?? "";
+  const secret = process.env.TBK_API_KEY_SECRET ?? "";
+  if (!id || !secret) throw new Error("Faltan TBK_API_KEY_ID / TBK_API_KEY_SECRET");
+  return { "Content-Type": "application/json", "Tbk-Api-Key-Id": id, "Tbk-Api-Key-Secret": secret };
 }
+
+async function tbkFetch<T>(url: string, init: RequestInit, timeoutMs = 15000): Promise<T> {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { ...init, signal: ac.signal });
+    if (!r.ok) throw new Error(await r.text());
+    return (await r.json()) as T;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+export type WebpayCreateResponse = { token: string; url: string };
+export type WebpayCommitResponse = {
+  buy_order: string;
+  session_id?: string;
+  status: string; // "AUTHORIZED" | ...
+  [k: string]: unknown;
+};
 
 export async function createWebpayTx(params: {
   orderId: string;
-  total: number;
-  returnUrl: string;
-}) {
+  total: number;      // CLP entero
+  returnUrl: string;  // absoluta
+}): Promise<WebpayCreateResponse> {
   const { orderId, total, returnUrl } = params;
-  const r = await fetch(
+  return tbkFetch<WebpayCreateResponse>(
     `${HOST}/rswebpaytransaction/api/webpay/v1.2/transactions`,
     {
       method: "POST",
@@ -29,30 +52,23 @@ export async function createWebpayTx(params: {
       body: JSON.stringify({
         buy_order: orderId,
         session_id: `sess_${orderId}`,
-        amount: total,
+        amount: Math.round(total), // asegura entero
         return_url: returnUrl,
       }),
     }
   );
-  if (!r.ok) throw new Error(await r.text());
-  const data = (await r.json()) as { token: string; url: string };
-  return { token: data.token, url: data.url };
 }
 
-export async function commitWebpayTx(token: string) {
-  const r = await fetch(
+export async function commitWebpayTx(token: string): Promise<WebpayCommitResponse> {
+  return tbkFetch<WebpayCommitResponse>(
     `${HOST}/rswebpaytransaction/api/webpay/v1.2/transactions/${token}`,
     { method: "PUT", headers: tbkHeaders() }
   );
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
 }
 
-export async function statusWebpayTx(token: string) {
-  const r = await fetch(
+export async function statusWebpayTx(token: string): Promise<WebpayCommitResponse> {
+  return tbkFetch<WebpayCommitResponse>(
     `${HOST}/rswebpaytransaction/api/webpay/v1.2/transactions/${token}`,
     { method: "GET", headers: tbkHeaders() }
   );
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
 }
