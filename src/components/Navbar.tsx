@@ -1,6 +1,4 @@
 "use client";
-import { useCart } from "@/stores/cart";
-
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { usePathname } from "next/navigation";
@@ -21,9 +19,8 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
       whileTap={{ scale: 0.97 }}
       aria-current={active ? "page" : undefined}
       className={`px-4 py-2 rounded-xl font-medium transition ${
-  active ? "text-blue-600"
-         : "text-slate-700 hover:text-slate-900"
-}`}
+        active ? "text-blue-600" : "text-slate-700 hover:text-slate-900"
+      }`}
     >
       {children}
     </MotionLink>
@@ -52,12 +49,13 @@ export default function Navbar() {
       </div>
 
       <div className="relative mx-auto max-w-7xl px-4 md:px-8 pb-3">
-<div className="mt-3 flex items-center justify-between px-2 py-3">
+        <div className="mt-3 flex items-center justify-between px-2 py-3">
           <Link href="/" className="flex items-center gap-2 text-xl md:text-2xl font-extrabold">
             <Car className="h-6 w-6 text-blue-600" />
             MAfums<span className="text-blue-600">.cl</span>
           </Link>
 
+          {/* Desktop */}
           <nav className="hidden md:flex items-center gap-2">
             <div
               onMouseEnter={showAutos}
@@ -104,6 +102,7 @@ export default function Navbar() {
             )}
           </nav>
 
+          {/* Toggle móvil */}
           <button
             aria-label="Abrir menú"
             onClick={() => setOpen((v) => !v)}
@@ -115,18 +114,21 @@ export default function Navbar() {
 
         <MegaMenuAutos open={hoverAutos} onEnter={showAutos} onLeave={hideAutos} />
 
+        {/* Móvil */}
         {open && (
           <div className="mt-2 md:hidden rounded-2xl border border-slate-200 bg-white text-slate-900">
             <div className="flex flex-col p-3">
-              <Link href="/galeria" onClick={() => setOpen(false)} className="px-3 py-2 rounded-xl hover:bg-slate-100">
-                Financiamiento
-              </Link>
-              <Link href="/galeria" onClick={() => setOpen(false)} className="px-3 py-2 rounded-xl hover:bg-slate-100">
-                Vehículos
-              </Link>
-              <Link href="/contact" onClick={() => setOpen(false)} className="px-3 py-2 rounded-xl hover:bg-slate-100">
-                Contacto
-              </Link>
+              <NavLink
+                href="/galeria?tipos=DISEÑADOR&priceMin=19990&priceMax=300000"
+              >
+                Perfumes Diseñador
+              </NavLink>
+              <NavLink
+                href="/galeria?tipos=ARABES&priceMin=19990&priceMax=300000"
+              >
+                Perfumes Árabes
+              </NavLink>
+              <NavLink href="/contact">Contacto</NavLink>
 
               {session ? (
                 <>
