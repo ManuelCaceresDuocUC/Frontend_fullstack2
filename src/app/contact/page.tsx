@@ -99,7 +99,7 @@ export default function ContactPage() {
             <div className="bg-gray-50 p-6 rounded-2xl shadow">
               <div className="flex items-center gap-3 mb-4">
                 <Mail className="h-5 w-5 text-blue-600" />
-                <span>contacto@mcautohub.cl</span>
+                <span>contacto@mafums.cl</span>
               </div>
               <div className="flex items-center gap-3 mb-4">
                 <Phone className="h-5 w-5 text-blue-600" />
