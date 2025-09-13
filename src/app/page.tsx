@@ -33,7 +33,6 @@ export default function Home() {
         </h2>
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
           <div className="bg-gray-50 p-6 rounded-2xl shadow hover:shadow-lg transition text-center">
-            <Car className="mx-auto h-12 w-12 text-blue-600 mb-4" />
             <h3 className="text-xl font-semibold mb-2">Perfumes exclusivos</h3>
             <p className="text-gray-600">
               Cada perfume pasa por un proceso de revisión antes de publicarse.
