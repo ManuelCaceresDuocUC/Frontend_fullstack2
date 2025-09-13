@@ -51,7 +51,7 @@ export default function Navbar() {
       <div className="relative mx-auto max-w-7xl px-4 md:px-8 pb-3">
         <div className="mt-3 flex items-center justify-between px-2 py-3">
           <Link href="/" className="flex items-center gap-2 text-xl md:text-2xl font-extrabold">
-            <Car className="h-6 w-6 text-blue-600" />
+            <a className="h-6 w-6 text-blue-600" />
             MAfums<span className="text-blue-600">.cl</span>
           </Link>
 
