@@ -5,6 +5,9 @@ const brands = [
   { src: "/brands/ajmal-perfumes-seeklogo.png", alt: "Ajmal" },
   { src: "/brands/al-haramain-seeklogo.svg", alt: "Al-haramain" },
   { src: "/brands/lattafa-logo.svg", alt: "Lattafa" },
+  {src: "/brands/Dior_Logo.svg", alt: "Dior" },
+  {src: "/brands/giorgio-armani.svg", alt: "Giorgio" },
+  {src: "/brands/Valentino_logo.svg", alt: "Valentino" }
 ];
 
 const REPEAT = 6; // súbelo si aún ves huecos
