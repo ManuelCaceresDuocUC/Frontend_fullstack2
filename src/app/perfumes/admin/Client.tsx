@@ -152,6 +152,7 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
  async function del(id: string) {
   if (!confirm("¿Eliminar este perfume?")) return;
   const res = await fetch(`/api/perfumes/${encodeURIComponent(id)}`, { method: "DELETE" });
+
   if (res && res.ok) setRows(rs => rs.filter(p => p.id !== id));
   else alert("No se pudo eliminar");
 }
