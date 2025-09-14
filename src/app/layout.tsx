@@ -4,7 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import CartFab from "@/components/CartFab";
 import CartDrawer from "@/components/CartDrawer";
-import Footer from "@/components/footer"; // <-- respeta mayúsculas
+import Footer from "@/components/Footer"; // <-- respeta mayúsculas
 import Navbar from "@/components/Navbar";
 import Providers from "@/components/Providers";
 
