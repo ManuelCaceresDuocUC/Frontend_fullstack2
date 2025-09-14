@@ -93,12 +93,12 @@ export default function CartDrawer() {
                       />
                       <button
                         onClick={()=>inc(item.id, item.ml)}
-                        disabled={item.stock !== undefined && item.qty >= item.stock}
-                        className="px-3 py-1.5 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
-                        aria-label="Aumentar"
+                        disabled={typeof item.stock === "number" && item.qty >= item.stock}
+                        className="disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         +
                       </button>
+
                       <p className="mt-1 text-xs text-slate-500">
                         {item.stock !== undefined ? `Stock: ${item.stock}` : null}
                       </p>
