@@ -30,7 +30,7 @@ model Stock {
   perfumeId String @unique
   qty       Int    @default(0)
 
-  perfume Perfume @relation(fields: [perfumeId], references: [id])
+  perfume Perfume @relation(fields: [perfumeId], references: [id], onDelete: Cascade)
 }
 
 model User {
@@ -115,7 +115,7 @@ model OrderItem {
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   perfumeId String
-  perfume   Perfume @relation(fields: [perfumeId], references: [id])
+  perfume   Perfume @relation(fields: [perfumeId], references: [id], onDelete: Cascade)
 
   name      String
   brand     String
