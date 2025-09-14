@@ -13,5 +13,6 @@ export default async function Page() {
   if (!session) redirect("/api/auth/signin");
   if (!admin || email !== admin) redirect("/");
 
+  
   return <Client />;
 }
