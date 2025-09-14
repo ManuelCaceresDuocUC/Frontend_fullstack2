@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-
+import { getJSON } from "@/lib/http";
 const S3_BASE = (process.env.NEXT_PUBLIC_S3_BASE ?? "").replace(/\/+$/, "");
 const toUrl = (key: string) => (S3_BASE ? `${S3_BASE}/${key.replace(/^\/+/, "")}` : key);
 const CATS = ["NICHO","ARABES","DISEÑADOR","OTROS"] as const;
@@ -16,7 +16,7 @@ const isCategoria = (x: unknown): x is Categoria =>
 
 async function uploadToS3(file: File, brand: string): Promise<{ key: string }> {
   const q = new URLSearchParams({ filename: file.name, type: file.type, brand });
-  const { signedUrl, key } = await fetch(`/api/s3/presign?${q}`).then(r => r.json());
+const { signedUrl, key } = await getJSON<{ signedUrl:string; key:string }>(`/api/s3/presign?${q}`);
   const put = await fetch(signedUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
   if (!put.ok) throw new Error("S3 upload failed");
   return { key };
