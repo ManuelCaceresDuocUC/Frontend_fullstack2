@@ -1,29 +1,41 @@
 @import "tailwindcss";
 
-/* Base corporativa */
+/* Base corporativa (claro) */
 :root{
-  --bg:#ffffff;            /* fondo */
-  --text:#0f172a;          /* texto */
-  --muted:#64748b;         /* texto secundario */
-  --border:#e2e8f0;        /* bordes */
-  --primary:#dc2626;       /* rojo corporativo */
-  --primary-600:#b91c1c;   /* hover/active */
+  --bg:#f4efe9;          /* beige fondo */
+  --text:#2b2f36;        /* texto principal */
+  --muted:#6b7280;       /* texto secundario */
+  --border:#e6e3dd;      /* bordes suaves */
+  --primary:#7a8c3a;     /* verde oliva */
+  --primary-600:#65752f; /* oliva oscuro (hover) */
+  --accent:#b2a7d6;      /* lavanda sutil */
 }
 
-/* Tailwind v4: tokens (no :root aquí) */
+/* Tailwind v4: tokens */
 @theme{
-  /* Mapea clases existentes a la nueva paleta */
-  --color-blue-600: var(--primary); /* cualquier 'text-blue-600' ahora es rojo */
-  --color-indigo-800:#0f172a;       /* fondos oscuros sobrios */
-  --color-amber-300:#f59e0b;        /* acento cálido para CTA */
+  /* Reaprovecha clases existentes */
+  --color-blue-600: var(--primary);     /* cualquier 'text-blue-600' será oliva */
+  --color-indigo-800:#2b2f36;           /* fondos sobrios */
+  --color-amber-300:#d7a6b3;            /* acento cálido (rosado suave) */
 
-  /* Opcional: habilita 'bg-primary', 'text-primary' */
+  /* Atajos semánticos */
   --color-primary: var(--primary);
   --color-primary-600: var(--primary-600);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-surface:#fffaf5;              /* tarjetas sobre beige */
 }
 
 @media (prefers-color-scheme: dark){
-  :root{ --bg:#0b1220; --text:#e5e7eb; --border:#1f2937; }
+  :root{
+    --bg:#0f1216;
+    --text:#e7e7e7;
+    --muted:#9aa3b2;
+    --border:#20242a;
+    --primary:#8fb14a;      /* leve lift en dark */
+    --primary-600:#6f8d39;
+    --accent:#9a90c8;
+  }
 }
 
 body{
@@ -43,7 +55,8 @@ body{
     color:#fff; background:var(--primary);
   }
   .btn-primary:hover{
-    background:var(--primary-600); box-shadow:0 6px 20px -8px rgba(220,38,38,.45);
+    background:var(--primary-600);
+    box-shadow:0 6px 20px -8px rgba(122,140,58,.35);
   }
   .btn-ghost{
     color:var(--text); background:#fff; border:1px solid var(--border);
