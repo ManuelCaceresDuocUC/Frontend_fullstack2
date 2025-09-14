@@ -149,12 +149,12 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
     if (filePickers.current[id]) filePickers.current[id]!.value = "";
   }
 
-  async function del(id: string) {
-    if (!confirm("¿Eliminar este perfume?")) return;
-    const res = await fetch(`/api/perfumes?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => null);
-    if (res && res.ok) setRows((rs) => rs.filter((p) => p.id !== id));
-    else alert("No se pudo eliminar");
-  }
+ async function del(id: string) {
+  if (!confirm("¿Eliminar este perfume?")) return;
+  const res = await fetch(`/api/perfumes/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => null);
+  if (res && res.ok) setRows(rs => rs.filter(p => p.id !== id));
+  else alert("No se pudo eliminar");
+}
 
   const money = (n: number) =>
     (Number.isFinite(n) ? n : 0).toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
