@@ -11,6 +11,19 @@ import Link from "next/link";
 const CATS = ["NICHO", "ARABES", "DISEÑADOR", "OTROS"] as const;
 type Categoria = typeof CATS[number];
 
+function parseFromSearch(sp: ReturnType<typeof useSearchParams>): Filtros {
+  const readArr = (key: string) =>
+    (sp.get(key)?.split(",").map(s => s.trim()).filter(Boolean)) || [];
+  const tipos = readArr("tipos").filter(v => CATS.includes(v as Categoria)) as Categoria[];
+  return {
+    marcas: readArr("marcas"),
+    tipos,
+    priceMin: sp.get("priceMin") ? Number(sp.get("priceMin")) : null,
+    priceMax: sp.get("priceMax") ? Number(sp.get("priceMax")) : null,
+    q: sp.get("q") || "",
+  };
+}
+
 
 /* ====== Config S3 ====== */
 const S3_BASE = (process.env.NEXT_PUBLIC_S3_BASE ?? "").replace(/\/+$/, "");
@@ -52,13 +65,8 @@ export default function GaleriaClient() {
   const readArr = (key: string) =>
     (sp.get(key)?.split(",").map(s => s.trim()).filter(Boolean)) || [];
 
-  const initial: Filtros = {
-    marcas: readArr("marcas"),
-    tipos: (readArr("tipos").filter(v => CATS.includes(v as Categoria)) as Categoria[]),
-    priceMin: sp.get("priceMin") ? Number(sp.get("priceMin")) : null,
-    priceMax: sp.get("priceMax") ? Number(sp.get("priceMax")) : null,
-    q: sp.get("q") || "",
-  };
+    const initial = useMemo(() => parseFromSearch(sp), [sp]);
+
 
   const [items, setItems] = useState<Item[]>([]);
 
@@ -82,7 +90,7 @@ export default function GaleriaClient() {
   }, []);
 
   const bounds = useMemo(() => {
-    const precios = items.map(v => v.precio ?? 0).filter(n => Number.isFinite(n));
+    const precios = items.map(v => v.precio ?? 0).filter(Number.isFinite);
     const min = precios.length ? Math.min(...precios) : null;
     const max = precios.length ? Math.max(...precios) : null;
     return { precioMin: min, precioMax: max };
@@ -94,13 +102,16 @@ export default function GaleriaClient() {
     priceMax: initial.priceMax ?? (bounds.precioMax ?? null),
   }));
 
-  useEffect(() => {
+   useEffect(() => {
+    const next = parseFromSearch(sp);
     setFiltros(f => ({
       ...f,
-      priceMin: f.priceMin ?? (bounds.precioMin ?? null),
-      priceMax: f.priceMax ?? (bounds.precioMax ?? null),
+      ...next,
+      priceMin: next.priceMin ?? (bounds.precioMin ?? null),
+      priceMax: next.priceMax ?? (bounds.precioMax ?? null),
     }));
-  }, [bounds.precioMin, bounds.precioMax]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sp, bounds.precioMin, bounds.precioMax]);
 
   const opciones = useMemo(() => {
     const uniq = (arr: (string | undefined)[]) =>
