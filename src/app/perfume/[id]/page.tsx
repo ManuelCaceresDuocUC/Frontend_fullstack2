@@ -12,14 +12,16 @@ const resolveImg = (s?: string | null) =>
 const fmt = (n: number) =>
   n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function Page({ params }: { params: { id: string } }) {
+  const { id } = params;
 
   const perfume = await prisma.perfume.findUnique({
     where: { id },
     include: { stock: true },
   });
   if (!perfume) notFound();
+
+  const qty = Number(perfume.stock?.qty ?? 0);
 
   const p = {
     id: perfume.id,
@@ -30,7 +32,6 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
     imagenes: (perfume.images as unknown as string[]) ?? [],
     createdAt: perfume.createdAt.toISOString(),
   };
-  const qty = perfume.stock?.qty ?? 0;
 
   const imgs = p.imagenes.map(resolveImg).filter(Boolean);
   const fallback = S3_BASE
@@ -54,12 +55,13 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
           <div className="mt-6 flex gap-3">
             <AddToCartButton
-              id={p.id}
-              name={p.nombre}
-              brand={p.marca}
-              price={p.precio}
-              ml={p.ml}
+              id={perfume.id}
+              name={perfume.name}
+              brand={perfume.brand}
+              price={perfume.price}
+              ml={perfume.ml}
               image={imgs[0] ?? fallback}
+              stock={qty}            // ← pásalo
               disabled={qty <= 0}
             />
             <a href="/galeria" className="px-5 py-3 rounded-2xl border border-white/20 hover:bg-white/10">
