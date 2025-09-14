@@ -23,6 +23,8 @@ model Perfume {
   category  Perfume_category @default(OTROS)
   stock     Stock?
   OrderItem OrderItem[]
+
+  description String? @db.Text   // <-- NUEVO
 }
 
 model Stock {

@@ -12,6 +12,7 @@ type Row = {
   imagenes: string[];
   categoria: Categoria;
   qty: number;
+  descripcion?: string
 };
 type ApiPerfumeDTO = {
   id: string;
@@ -22,6 +23,7 @@ type ApiPerfumeDTO = {
   imagenes?: unknown;
   categoria?: string;
   stock?: number;
+  descripcion?: string
 };
 const CATS = ["NICHO", "ARABES", "DISEÑADOR", "OTROS"] as const;
 const S3_BASE = (process.env.NEXT_PUBLIC_S3_BASE ?? "").replace(/\/+$/, "");
@@ -59,6 +61,8 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
             imagenes: imgs,
             categoria: (d.categoria as Categoria) ?? "OTROS",
             qty: Number.isFinite(Number(d.stock)) ? Number(d.stock) : 0,
+            descripcion: typeof d.descripcion === "string" ? d.descripcion : "",
+
           };
         });
         setRows(norm);
@@ -81,22 +85,23 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
     setRows((rs) => rs.map((p) => (p.id === id ? { ...p, qty: Math.max(0, qty | 0) } : p)));
 
   async function savePerfume(id: string) {
-    const p = rows.find((x) => x.id === id);
-    if (!p) return;
-    setSavingId(id);
-    const res = await fetch(`/api/perfumes?id=${encodeURIComponent(id)}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        nombre: p.nombre,
-        precio: Number.isFinite(p.precio) ? p.precio : 0,
-        categoria: p.categoria,
-        imagenes: Array.isArray(p.imagenes) ? p.imagenes : [],
-      }),
-    }).catch(() => null);
-    setSavingId(null);
-    if (!res || !res.ok) alert("No se pudo guardar");
-  }
+  const p = rows.find((x) => x.id === id);
+  if (!p) return;
+  setSavingId(id);
+  const res = await fetch(`/api/perfumes?id=${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      nombre: p.nombre,
+      precio: Number.isFinite(p.precio) ? p.precio : 0,
+      categoria: p.categoria,
+      imagenes: Array.isArray(p.imagenes) ? p.imagenes : [],
+      descripcion: p.descripcion ?? "", // <- aquí va
+    }),
+  }).catch(() => null);
+  setSavingId(null);
+  if (!res || !res.ok) alert("No se pudo guardar");
+}
 
   async function saveStock(id: string) {
     const p = rows.find((x) => x.id === id);
@@ -204,7 +209,14 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
                     ))}
                   </select>
                 </td>
-
+                <td className="py-2">
+                  <textarea
+                    value={r.descripcion ?? ""}
+                    onChange={(e)=> setRows(rs=> rs.map(p=> p.id===r.id ? {...p, descripcion: e.target.value} : p))}
+                    className="w-64 h-24 rounded border px-2 py-1 bg-white text-black"
+                    placeholder="Notas, familia olfativa, etc."
+                  />
+                </td>
                 <td className="py-2">
                   <div className="flex items-center gap-2">
                     <button onClick={() => setQty(r.id, (r.qty || 0) - 1)} className="px-2 py-1 rounded border">-</button>

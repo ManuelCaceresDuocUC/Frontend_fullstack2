@@ -26,6 +26,7 @@ export default async function Page() {
     imagenes: Array.isArray(p.images) ? (p.images as string[]) : [],
     categoria: dbToApiCat(String(p.category)),
     qty: p.stock?.qty ?? 0,
+    
   }));
 
   return <Client initialRows={rows} />;

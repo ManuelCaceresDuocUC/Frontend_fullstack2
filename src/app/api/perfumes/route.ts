@@ -8,11 +8,33 @@ export const dynamic = "force-dynamic";
 
 /* tipos */
 type CategoriaApi = "NICHO" | "ARABES" | "DISEÑADOR" | "OTROS";
-type PerfumeInput = { nombre:string; marca:string; ml:number; precio:number; imagenes?:string[]; categoria?: CategoriaApi | string; };
-type ApiPerfume = { id:string; nombre:string; marca:string; ml:number; precio:number; imagenes:string[]; imagen:string|null; categoria:CategoriaApi; createdAt:string; stock:number; };
+type PerfumeInput = {
+  nombre: string;
+  marca: string;
+  ml: number;
+  precio: number;
+  imagenes?: string[];
+  categoria?: CategoriaApi | string;
+  descripcion?: string; // nuevo
+};
+type ApiPerfume = {
+  id: string;
+  nombre: string;
+  marca: string;
+  ml: number;
+  precio: number;
+  imagenes: string[];
+  imagen: string | null;
+  categoria: CategoriaApi;
+  createdAt: string;
+  stock: number;
+  descripcion?: string; // nuevo
+};
 
 /* utils */
-const norm = (s: unknown) => String(s ?? "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toUpperCase();
+const norm = (s: unknown) =>
+  String(s ?? "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toUpperCase();
+
 const apiToDbCat = (c: unknown): Perfume_category => {
   const u = norm(c);
   if (u === "NICHO") return "NICHO";
@@ -20,11 +42,17 @@ const apiToDbCat = (c: unknown): Perfume_category => {
   if (u === "DISENADOR" || u === "DISEÑADOR" || u === "DISENADOR") return "DISENADOR";
   return "OTROS";
 };
-const dbToApiCat = (c: Perfume_category): CategoriaApi => (c === "DISENADOR" ? "DISEÑADOR" : (c as CategoriaApi));
-const jsonToStringArray = (v: unknown): string[] => Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+const dbToApiCat = (c: Perfume_category): CategoriaApi =>
+  c === "DISENADOR" ? "DISEÑADOR" : (c as CategoriaApi);
+
+const jsonToStringArray = (v: unknown): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 
 /* mapeo */
-type PerfumeRow = Perfume & { stock?: { qty: number } | null };
+type PerfumeRow = Perfume & {
+  description?: string | null;           // <-- agrega
+  stock?: { qty: number } | null;
+};
 const toApi = (p: PerfumeRow): ApiPerfume => {
   const imgs = jsonToStringArray(p.images as unknown);
   return {
@@ -38,6 +66,7 @@ const toApi = (p: PerfumeRow): ApiPerfume => {
     categoria: dbToApiCat(p.category),
     createdAt: p.createdAt.toISOString(),
     stock: p.stock?.qty ?? 0,
+    descripcion: p.description ?? undefined,   // <-- ya compila
   };
 };
 
@@ -54,7 +83,11 @@ export async function GET(req: Request) {
   }
 
   const where: Prisma.PerfumeWhereInput = dbCat ? { category: dbCat } : {};
-  const list = await prisma.perfume.findMany({ where, orderBy: { createdAt: "desc" }, include: { stock: true } });
+  const list = await prisma.perfume.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    include: { stock: true },
+  });
   return NextResponse.json(list.map((x) => toApi(x as PerfumeRow)));
 }
 
@@ -66,25 +99,40 @@ export async function POST(req: Request) {
     const brand = String(b.marca ?? "").trim();
     const ml = Number(b.ml);
     const price = Number(b.precio);
-    const images = Array.isArray(b.imagenes) ? b.imagenes.filter((x): x is string => typeof x === "string") : [];
+    const images = Array.isArray(b.imagenes)
+      ? b.imagenes.filter((x): x is string => typeof x === "string")
+      : [];
     const category = apiToDbCat(b.categoria);
+    const description = typeof b.descripcion === "string" ? b.descripcion.trim() : null;
 
-    if (!name || !brand) return NextResponse.json({ error: "nombre y marca son obligatorios" }, { status: 400 });
-    if (!Number.isFinite(ml) || !Number.isFinite(price)) return NextResponse.json({ error: "ml y precio deben ser numéricos" }, { status: 400 });
+
+    if (!name || !brand)
+      return NextResponse.json({ error: "nombre y marca son obligatorios" }, { status: 400 });
+    if (!Number.isFinite(ml) || !Number.isFinite(price))
+      return NextResponse.json({ error: "ml y precio deben ser numéricos" }, { status: 400 });
 
     const created = await prisma.perfume.create({
-      data: { name, brand, ml, price, images: images as unknown as Prisma.InputJsonValue, category },
-    });
+  data: {
+    name, brand, ml, price,
+    images: images as unknown as Prisma.InputJsonValue,
+    category,
+    description,                               // <-- nuevo
+  },
+});
 
-    await prisma.stock.upsert({ where: { perfumeId: created.id }, update: {}, create: { perfumeId: created.id, qty: 0 } });
+    await prisma.stock.upsert({
+      where: { perfumeId: created.id },
+      update: {},
+      create: { perfumeId: created.id, qty: 0 },
+    });
 
     return NextResponse.json({ id: created.id }, { status: 201 });
   } catch (e: unknown) {
-  let msg = "error";
-  if (e instanceof Prisma.PrismaClientKnownRequestError) msg = `${e.code}: ${e.message}`;
-  else if (e instanceof Error) msg = e.message;
-  return NextResponse.json({ error: msg }, { status: 500 });
-}
+    let msg = "error";
+    if (e instanceof Prisma.PrismaClientKnownRequestError) msg = `${e.code}: ${e.message}`;
+    else if (e instanceof Error) msg = e.message;
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 /* PATCH /api/perfumes?id=... */
@@ -100,12 +148,21 @@ export async function PATCH(req: Request) {
   if (patch.ml !== undefined) data.ml = Number(patch.ml);
   if (patch.precio !== undefined) data.price = Number(patch.precio);
   if (patch.categoria !== undefined) data.category = apiToDbCat(patch.categoria);
+  if (patch.descripcion !== undefined) data.description = String(patch.descripcion);
+
   if (patch.imagenes !== undefined) {
-    const imgs = Array.isArray(patch.imagenes) ? patch.imagenes.filter((x): x is string => typeof x === "string") : [];
+    const imgs = Array.isArray(patch.imagenes)
+      ? patch.imagenes.filter((x): x is string => typeof x === "string")
+      : [];
     data.images = imgs as unknown as Prisma.InputJsonValue;
   }
 
-  const updated = await prisma.perfume.update({ where: { id }, data, include: { stock: true } });
+  const updated = await prisma.perfume.update({
+    where: { id },
+    data,
+    include: { stock: true },
+  });
+
   return NextResponse.json({ ok: true, item: toApi(updated as PerfumeRow) });
 }
 
