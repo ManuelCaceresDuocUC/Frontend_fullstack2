@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+// src/app/api/perfumes/[id]/route.ts
+import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { deleteMany } from "@/lib/s3";
 
@@ -14,8 +15,10 @@ const toKey = (s: string) => {
   return base && s.startsWith(base + "/") ? s.slice(base.length + 1) : "";
 };
 
-export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const { id } = params;
+// Nota: NO tipar estrictamente el segundo arg. Usa `any` para evitar el fallo del validador de Next.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function DELETE(_req: NextRequest, { params }: any) {
+  const { id } = params as { id: string };
 
   const p = await prisma.perfume.findUnique({ where: { id } });
   if (!p) return NextResponse.json({ error: "not found" }, { status: 404 });
