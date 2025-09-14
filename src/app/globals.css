@@ -1,65 +1,203 @@
 @import "tailwindcss";
 
-/* Base corporativa (claro) */
+/* ---------- Base corporativa (claro) ---------- */
 :root{
-  --bg:#f4efe9;          /* beige fondo */
+  --bg:#f4efe9;          /* fondo */
   --text:#2b2f36;        /* texto principal */
   --muted:#6b7280;       /* texto secundario */
   --border:#e6e3dd;      /* bordes suaves */
+  --surface:#fffaf5;     /* tarjetas sobre beige */
+
   --primary:#7a8c3a;     /* verde oliva */
-  --primary-600:#65752f; /* oliva oscuro (hover) */
+  --primary-600:#65752f; /* hover */
+  --primary-700:#566427; /* active */
   --accent:#b2a7d6;      /* lavanda sutil */
+
+  --success:#10b981;
+  --warning:#f59e0b;
+  --danger:#dc2626;
+
+  --ring:#b7c276;        /* focus ring */
+  --shadow-rgb: 20 23 28;/* sombras neutras */
 }
 
-/* Tailwind v4: tokens */
+/* ---------- Tailwind v4 tokens ---------- */
 @theme{
-  /* Reaprovecha clases existentes */
-  --color-blue-600: var(--primary);     /* cualquier 'text-blue-600' será oliva */
-  --color-indigo-800:#2b2f36;           /* fondos sobrios */
-  --color-amber-300:#d7a6b3;            /* acento cálido (rosado suave) */
+  --color-blue-600: var(--primary);
+  --color-indigo-800:#2b2f36;
+  --color-amber-300:#d7a6b3;
 
-  /* Atajos semánticos */
   --color-primary: var(--primary);
   --color-primary-600: var(--primary-600);
+  --color-primary-700: var(--primary-700);
   --color-border: var(--border);
   --color-muted: var(--muted);
-  --color-surface:#fffaf5;              /* tarjetas sobre beige */
+  --color-surface: var(--surface);
+
+  --shadow-soft: 0 6px 20px -10px rgb(var(--shadow-rgb) / .25);
+  --shadow-hard: 0 12px 32px -12px rgb(var(--shadow-rgb) / .35);
 }
 
+/* ---------- Dark mode ---------- */
 @media (prefers-color-scheme: dark){
   :root{
     --bg:#0f1216;
     --text:#e7e7e7;
     --muted:#9aa3b2;
     --border:#20242a;
-    --primary:#8fb14a;      /* leve lift en dark */
+    --surface:#141821;
+
+    --primary:#8fb14a;
     --primary-600:#6f8d39;
+    --primary-700:#5e772f;
     --accent:#9a90c8;
+
+    --ring:#b7d07a;
+    --shadow-rgb: 0 0 0;
   }
 }
 
+/* ---------- Base global ---------- */
+html,body{ height:100%; }
 body{
   background:var(--bg);
   color:var(--text);
   font-family:var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
 }
 
-/* Componentes */
+/* ---------- Layer: components ---------- */
 @layer components{
+  /* Botones */
   .btn{
-    display:inline-flex; align-items:center; justify-content:center;
-    padding:.75rem 1.5rem; border-radius:1rem; font-weight:600;
-    transition:background-color .2s, box-shadow .2s, color .2s;
+    display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
+    padding:.75rem 1.25rem; border-radius:1rem; font-weight:600;
+    border:1px solid transparent;
+    transition:background-color .2s, box-shadow .2s, color .2s, border-color .2s, transform .06s;
   }
+  .btn:focus-visible{
+    outline:none; box-shadow:0 0 0 3px color-mix(in oklab, var(--ring) 40%, transparent);
+  }
+  .btn:active{ transform:translateY(1px); }
+
   .btn-primary{
     color:#fff; background:var(--primary);
+    box-shadow: var(--shadow-soft);
   }
-  .btn-primary:hover{
-    background:var(--primary-600);
-    box-shadow:0 6px 20px -8px rgba(122,140,58,.35);
-  }
+  .btn-primary:hover{ background:var(--primary-600); }
+  .btn-primary:active{ background:var(--primary-700); box-shadow:none; }
+  .btn-primary:disabled{ opacity:.5; cursor:not-allowed; box-shadow:none; }
+
   .btn-ghost{
-    color:var(--text); background:#fff; border:1px solid var(--border);
+    color:var(--text); background:var(--surface); border-color:var(--border);
   }
-  .btn-ghost:hover{ background:#f8fafc; }
+  .btn-ghost:hover{ background:color-mix(in oklab, var(--surface) 85%, white); }
+  .btn-ghost:disabled{ opacity:.5; cursor:not-allowed; }
+
+  .btn-outline{
+    color:var(--text); background:transparent; border-color:var(--border);
+  }
+  .btn-outline:hover{ background:var(--surface); }
+
+  /* Tarjetas */
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:1.25rem;
+    box-shadow: var(--shadow-soft);
+  }
+  .card-hover:hover{ box-shadow: var(--shadow-hard); translate:0 -1px; transition:box-shadow .2s, translate .2s; }
+
+  /* Inputs */
+  .field{ display:flex; flex-direction:column; gap:.375rem; }
+  .label{ font-size:.875rem; color:var(--muted); }
+
+  .input, .select, .textarea{
+    width:100%; background:var(--surface); color:var(--text);
+    border:1px solid var(--border); border-radius:.875rem;
+    padding:.625rem .875rem; transition:border-color .2s, box-shadow .2s, background .2s;
+  }
+  .input::placeholder, .textarea::placeholder{ color:color-mix(in oklab, var(--muted) 80%, transparent); }
+  .input:focus, .select:focus, .textarea:focus{
+    outline:none; border-color:color-mix(in oklab, var(--primary) 40%, var(--border));
+    box-shadow:0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent);
+  }
+  .input[disabled]{ opacity:.6; cursor:not-allowed; }
+
+  /* Checkbox / Radio minimal */
+  .check{
+    appearance:none; width:1.05rem; height:1.05rem; border-radius:.4rem;
+    border:1px solid var(--border); background:var(--surface);
+    display:inline-grid; place-items:center; transition:all .2s;
+  }
+  .check:checked{ background:var(--primary); border-color:var(--primary); }
+  .check:checked::after{ content:""; width:.55rem; height:.55rem; background:#fff; border-radius:.2rem; }
+  .radio{
+    appearance:none; width:1.05rem; height:1.05rem; border-radius:999px;
+    border:1px solid var(--border); background:var(--surface); display:inline-grid; place-items:center; transition:all .2s;
+  }
+  .radio:checked{ border-color:var(--primary); box-shadow:0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }
+  .radio:checked::after{ content:""; width:.55rem; height:.55rem; background:var(--primary); border-radius:999px; }
+
+  /* Chips / Badges */
+  .chip{
+    display:inline-flex; align-items:center; gap:.5rem;
+    padding:.35rem .65rem; border:1px solid var(--border);
+    background:var(--surface); border-radius:999px; font-size:.8125rem;
+  }
+  .chip-close{ opacity:.7; }
+  .chip-close:hover{ opacity:1; }
+
+  /* Alertas */
+  .alert{
+    border:1px solid var(--border); border-radius:1rem; padding:.75rem .9rem;
+    display:flex; gap:.6rem; align-items:flex-start; background:var(--surface);
+  }
+  .alert-success{ border-color: color-mix(in oklab, var(--success) 25%, var(--border)); }
+  .alert-warning{ border-color: color-mix(in oklab, var(--warning) 25%, var(--border)); }
+  .alert-danger{  border-color: color-mix(in oklab, var(--danger)  25%, var(--border)); }
+
+  /* Links */
+  .link{ color:var(--primary); }
+  .link:hover{ color:var(--primary-600); text-decoration:underline; }
+
+  /* Table minimal */
+  .table{ width:100%; border-collapse:separate; border-spacing:0; }
+  .th, .td{ padding:.75rem; text-align:left; }
+  .tr + .tr .td{ border-top:1px solid var(--border); }
+  .thead .th{ color:var(--muted); font-weight:600; }
+
+  /* Toolbar */
+  .toolbar{ display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
+  .toolbar .spacer{ flex:1 1 auto; }
+
+  /* Skeleton */
+  .skeleton{
+    background: linear-gradient(90deg,
+      color-mix(in oklab, var(--surface) 88%, #fff) 25%,
+      color-mix(in oklab, var(--surface) 70%, #fff) 37%,
+      color-mix(in oklab, var(--surface) 88%, #fff) 63%);
+    background-size: 400% 100%; animation: sk 1.2s ease-in-out infinite;
+    border-radius:.75rem;
+  }
+  @keyframes sk{ 0%{background-position:100% 0} 100%{background-position:0 0} }
+}
+
+/* ---------- Layer: utilities ---------- */
+@layer utilities{
+  .ring-focus{ box-shadow:0 0 0 3px color-mix(in oklab, var(--ring) 40%, transparent); }
+  .divider{ height:1px; background:var(--border); }
+  .text-muted{ color:var(--muted); }
+  .surface{ background:var(--surface); }
+  .shadow-soft{ box-shadow: var(--shadow-soft); }
+  .shadow-hard{ box-shadow: var(--shadow-hard); }
+
+  /* Gradiente sutil para headers o secciones hero */
+  .bg-hero{
+    background:
+      radial-gradient(1200px 600px at 10% -10%, color-mix(in oklab, var(--accent) 16%, transparent), transparent 60%),
+      radial-gradient(1000px 500px at 90% -20%, color-mix(in oklab, var(--primary) 14%, transparent), transparent 60%),
+      var(--bg);
+  }
 }
