@@ -26,8 +26,14 @@ export default function VehicleCard({ v }: { v?: Vehiculo }) {
   return (
     <div className="group rounded-2xl border border-neutral-200 bg-white text-neutral-900 shadow-sm overflow-hidden transition hover:shadow-md">
       <div className="relative w-full h-52">
-        <Image src={v.imagen} alt={`${v.marca} ${v.modelo}`} fill className="object-cover" />
-        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent pointer-events-none" />
+        <Image
+              src={v.imagen}
+              alt={`${v.marca} ${v.modelo}`}
+              fill
+              className="object-contain p-4"  // sin recorte
+              sizes="(min-width:1024px) 33vw, (min-width:640px) 50vw, 100vw"
+            />     
+       <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/35 to-transparent pointer-events-none" />
       </div>
 
       <div className="p-5 flex-1 flex flex-col gap-2">
