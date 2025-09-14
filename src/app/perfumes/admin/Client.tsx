@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-
+import { getJSON } from "@/lib/http";
 type Categoria = "NICHO" | "ARABES" | "DISEÑADOR" | "OTROS";
 type Row = {
   id: string;
@@ -29,7 +29,7 @@ const toUrl = (key: string) => (S3_BASE ? `${S3_BASE}/${key.replace(/^\/+/, "")}
 
 async function uploadToS3(file: File, brand: string): Promise<string> {
   const q = new URLSearchParams({ filename: file.name, type: file.type, brand });
-  const { signedUrl, key } = await fetch(`/api/s3/presign?${q}`).then((r) => r.json());
+const { signedUrl, key } = await getJSON<{ signedUrl:string; key:string }>(`/api/s3/presign?${q}`);
   const put = await fetch(signedUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
   if (!put.ok) throw new Error("S3 upload failed");
   return key;
