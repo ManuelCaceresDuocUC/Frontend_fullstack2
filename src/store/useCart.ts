@@ -9,6 +9,8 @@ export type CartItem = {
   price: number;
   image?: string;
   qty: number;
+    stock?: number; // ← tope disponible (opcional)
+
 };
 
 type CartState = {
@@ -17,9 +19,15 @@ type CartState = {
   open: () => void;
   close: () => void;
   add: (item: Omit<CartItem, "qty"> & { qty?: number }) => void;
-  remove: (id: string) => void;   // ✅ añade
-  clear: () => void;              // ✅ añade
+  remove: (id: string, ml?: number | null) => void;
+  clear: () => void;
+  inc: (id: string, ml?: number | null) => void;
+  dec: (id: string, ml?: number | null) => void;
+  setQty: (id: string, ml: number | null | undefined, qty: number) => void;
 };
+
+const clamp = (q: number, stock?: number) =>
+  stock && stock > 0 ? Math.min(q, stock) : q;
 
 export const useCart = create<CartState>((set) => ({
   items: [],
@@ -29,15 +37,21 @@ export const useCart = create<CartState>((set) => ({
 
   add: (item) =>
     set((s) => {
-      const qty = item.qty ?? 1;
-      const idx = s.items.findIndex(
-        (i) => i.id === item.id && i.ml === (item.ml ?? null)
-      );
+      const ml = item.ml ?? null;
+      const idx = s.items.findIndex((i) => i.id === item.id && i.ml === ml);
+      const addQty = item.qty ?? 1;
+
       if (idx >= 0) {
+        const entry = s.items[idx];
+        const nextQty = clamp(entry.qty + addQty, entry.stock);
+        if (nextQty === entry.qty) return { items: s.items }; // ya en tope
         const next = [...s.items];
-        next[idx] = { ...next[idx], qty: next[idx].qty + qty };
+        next[idx] = { ...entry, qty: nextQty };
         return { items: next };
       }
+
+      // nuevo ítem: guarda stock si viene
+      const qty = clamp(addQty, item.stock);
       return {
         items: [
           ...s.items,
@@ -45,20 +59,47 @@ export const useCart = create<CartState>((set) => ({
             id: item.id,
             name: item.name,
             brand: item.brand,
-            ml: item.ml ?? null,
+            ml,
             price: item.price,
             image: item.image,
+            stock: item.stock, // opcional
             qty,
           },
         ],
       };
     }),
 
-  remove: (id) =>
-    set((s) => ({
-      // elimina todas las líneas con ese id (indistinto del ml)
-      items: s.items.filter((i) => i.id !== id),
-    })),
+ remove: (id, ml = null) =>
+    set((s) => ({ items: s.items.filter((i) => !(i.id === id && i.ml === ml)) })),
 
   clear: () => set({ items: [] }),
+
+  inc: (id, ml = null) =>
+    set((s) => {
+      const next = s.items.map((i) => {
+        if (i.id !== id || i.ml !== ml) return i;
+        const q = clamp(i.qty + 1, i.stock);
+        return q === i.qty ? i : { ...i, qty: q };
+      });
+      return { items: next };
+    }),
+
+  dec: (id, ml = null) =>
+    set((s) => {
+      const next = s.items
+        .map((i) =>
+          i.id === id && i.ml === ml ? { ...i, qty: Math.max(1, i.qty - 1) } : i
+        );
+      return { items: next };
+    }),
+
+  setQty: (id, ml, qty) =>
+    set((s) => {
+      const next = s.items.map((i) => {
+        if (i.id !== id || i.ml !== (ml ?? null)) return i;
+        const q = clamp(Math.max(1, qty), i.stock);
+        return { ...i, qty: q };
+      });
+      return { items: next };
+    }),
 }));
