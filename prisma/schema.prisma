@@ -7,30 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/**
- * ================= Base =================
- */
-
 model Perfume {
-  id        String           @id @default(cuid())
-  name      String
-  brand     String
-  ml        Int
-  price     Int
-  images    Json
-  createdBy String?
-  createdAt DateTime         @default(now())
-  category  Perfume_category @default(OTROS)
-  stock     Stock?
-  OrderItem OrderItem[]
+  id          String           @id @default(cuid())
+  name        String
+  brand       String
+  ml          Int
+  price       Int
+  images      Json
+  createdBy   String?
+  createdAt   DateTime         @default(now())
+  category    Perfume_category @default(OTROS)
+  description String?          @db.Text
+  stock       Stock?
+  OrderItem   OrderItem[]
 }
 
 model Stock {
-  id        String @id @default(cuid())
-  perfumeId String @unique
-  qty       Int    @default(0)
-
-  perfume Perfume @relation(fields: [perfumeId], references: [id], onDelete: Cascade)
+  id        String  @id @default(cuid())
+  perfumeId String  @unique
+  qty       Int     @default(0)
+  perfume   Perfume @relation(fields: [perfumeId], references: [id], onDelete: Cascade)
 }
 
 model User {
@@ -42,6 +38,76 @@ model User {
   createdAt DateTime  @default(now())
 }
 
+model Order {
+  id             String      @id @default(cuid())
+  userId         String?
+  email          String
+  buyerName      String
+  phone          String?
+  shippingStreet String      @default("")
+  shippingCity   String      @default("")
+  shippingRegion String      @default("")
+  shippingZip    String      @default("")
+  shippingNotes  String      @default("")
+  subtotal       Int
+  shippingFee    Int
+  total          Int
+  status         OrderStatus @default(PENDING)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  items          OrderItem[]
+  payment        Payment?
+  shipment       Shipment?
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  perfumeId String
+  name      String
+  brand     String
+  ml        Int
+  unitPrice Int
+  qty       Int
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  perfume   Perfume @relation(fields: [perfumeId], references: [id], onDelete: Cascade)
+
+  @@index([orderId], map: "order_items_orderId_fkey")
+  @@index([perfumeId], map: "order_items_perfumeId_fkey")
+  @@map("order_items")
+}
+
+model Payment {
+  id           String        @id @default(cuid())
+  orderId      String        @unique
+  method       PaymentMethod
+  status       PaymentStatus @default(INITIATED)
+  providerTxId String?
+  amount       Int
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Shipment {
+  id        String   @id @default(cuid())
+  orderId   String   @unique
+  carrier   String?
+  tracking  String?
+  delivered Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("shipments")
+}
+
 enum User_role {
   USER
   ADMIN
@@ -50,13 +116,9 @@ enum User_role {
 enum Perfume_category {
   NICHO
   ARABES
-  DISENADOR // usa "DISENADOR"; en UI mapea a “DISEÑADOR”
+  DISENADOR
   OTROS
 }
-
-/**
- * ================= Checkout =================
- */
 
 enum OrderStatus {
   PENDING
@@ -78,77 +140,4 @@ enum PaymentMethod {
   WEBPAY
   SERVIPAG
   MANUAL
-}
-
-model Order {
-  id        String  @id @default(cuid())
-  userId    String?
-  email     String
-  buyerName String
-  phone     String?
-
-  // Dirección “plana”
-  shippingStreet String @default("")
-  shippingCity   String @default("")
-  shippingRegion String @default("")
-  shippingZip    String @default("")
-  shippingNotes  String @default("")
-
-  items       OrderItem[]
-  subtotal    Int
-  shippingFee Int
-  total       Int
-  status      OrderStatus @default(PENDING)
-  payment     Payment?
-  shipment    Shipment?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  @@index([status])
-  @@index([createdAt])
-  @@map("orders") // evita palabra reservada ORDER
-}
-
-model OrderItem {
-  id      String @id @default(cuid())
-  orderId String
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  perfumeId String
-  perfume   Perfume @relation(fields: [perfumeId], references: [id], onDelete: Cascade)
-
-  name      String
-  brand     String
-  ml        Int
-  unitPrice Int // precio unitario CLP
-  qty       Int
-
-  @@map("order_items")
-}
-
-model Payment {
-  id           String        @id @default(cuid())
-  orderId      String        @unique
-  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  method       PaymentMethod
-  status       PaymentStatus @default(INITIATED)
-  providerTxId String?
-  amount       Int
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-
-  @@map("payments")
-}
-
-model Shipment {
-  id        String   @id @default(cuid())
-  orderId   String   @unique
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  carrier   String?
-  tracking  String?
-  delivered Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("shipments")
 }
