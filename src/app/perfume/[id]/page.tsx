@@ -33,6 +33,7 @@ export default async function Page({
     marca: perfume.brand,
     ml: perfume.ml,
     precio: perfume.price,
+    descripcion: perfume.description ?? "",   // ← NUEVO
     imagenes: (perfume.images as unknown as string[]) ?? [],
     createdAt: perfume.createdAt.toISOString(),
   };
@@ -56,6 +57,11 @@ export default async function Page({
           <p className={qty > 0 ? "mt-1 text-emerald-400" : "mt-1 text-red-300"}>
             {qty > 0 ? `Stock: ${qty} unidades` : "Sin stock"}
           </p>
+          {p.descripcion && (
+            <div className="mt-5 text-white/90 text-sm leading-relaxed whitespace-pre-wrap">
+              {p.descripcion}
+            </div>
+          )}
 
           <div className="mt-6 flex gap-3">
             <AddToCartButton
