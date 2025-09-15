@@ -44,19 +44,21 @@ export default function Client() {
     }
   }
 
-  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const rawCat = fd.get("categoria");
-const categoria: Categoria = isCategoria(rawCat) ? (String(rawCat) as Categoria) : "OTROS";
+    const categoria: Categoria = isCategoria(rawCat) ? (String(rawCat) as Categoria) : "OTROS";
+
     const body = {
-  nombre: String(fd.get("nombre")),
-  marca: String(fd.get("marca")),
-  ml: Number(fd.get("ml")),
-  precio: Number(fd.get("precio")),
-  categoria,          // <- ya tipado, sin any
-  imagenes: keys,
-};
+      nombre: String(fd.get("nombre") ?? "").trim(),
+      marca: String(fd.get("marca") ?? "").trim(),
+      ml: Number(fd.get("ml")),
+      precio: Number(fd.get("precio")),
+      categoria,
+      descripcion: String(fd.get("descripcion") ?? "").trim(), // ← NUEVO
+      imagenes: keys,
+    };
 
     setLoading(true);
     const res = await fetch("/api/perfumes", {
@@ -69,7 +71,6 @@ const categoria: Categoria = isCategoria(rawCat) ? (String(rawCat) as Categoria)
     if (res.ok) router.push("/galeria");
     else alert("Error al publicar");
   }
-
   return (
     <main className="pt-28 md:pt-36 min-h-[70vh] px-4 py-16 bg-gradient-to-b from-blue-600 to-indigo-800 text-white">
       <div className="max-w-2xl mx-auto rounded-2xl border border-white/20 bg-white/10 backdrop-blur p-6">
@@ -105,6 +106,12 @@ const categoria: Categoria = isCategoria(rawCat) ? (String(rawCat) as Categoria)
   className="rounded-xl border border-white/20 bg-white/10 px-3 py-2">
   {CATS.map(c => <option key={c} value={c}>{c}</option>)}
 </select>
+<textarea
+              name="descripcion"
+              rows={4}
+              placeholder="Descripción del perfume (notas, uso, estacionalidad)"
+              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-white placeholder-white/60"
+            />
         </div>
           <div>
             <label className="block text-sm mb-1">Imágenes (S3)</label>
