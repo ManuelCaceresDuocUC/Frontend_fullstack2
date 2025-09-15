@@ -1,10 +1,11 @@
 // src/app/api/perfumes/[id]/route.ts
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { deleteMany } from "@/lib/s3";
 
+import { deleteMany } from "@/lib/s3"; // ahora sí existe
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
 
 const arr = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
