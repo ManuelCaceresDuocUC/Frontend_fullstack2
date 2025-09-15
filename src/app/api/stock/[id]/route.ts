@@ -1,15 +1,26 @@
+// src/app/api/stock/[id]/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Body = { qty: number };
+type Body = { qty?: number };
+type DeltaBody = { delta?: number };
 
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
-  const { id } = params;
-  const { qty } = (await req.json()) as Partial<Body>;
+function getId(ctx: unknown): string | undefined {
+  if (typeof ctx !== "object" || ctx === null) return;
+  const params = (ctx as { params?: unknown }).params;
+  if (typeof params !== "object" || params === null) return;
+  const id = (params as Record<string, unknown>).id;
+  return typeof id === "string" ? id : undefined;
+}
+
+export async function PUT(req: Request, ctx: unknown) {
+  const id = getId(ctx);
   if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
+
+  const { qty } = (await req.json()) as Body;
   if (!Number.isFinite(qty)) return NextResponse.json({ error: "qty inválido" }, { status: 400 });
 
   const r = await prisma.stock.upsert({
@@ -20,10 +31,11 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   return NextResponse.json({ ok: true, qty: r.qty });
 }
 
-// opcional: ajustar por delta
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const { id } = params;
-  const { delta } = (await req.json()) as { delta: number };
+export async function PATCH(req: Request, ctx: unknown) {
+  const id = getId(ctx);
+  if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
+
+  const { delta } = (await req.json()) as DeltaBody;
   if (!Number.isFinite(delta)) return NextResponse.json({ error: "delta inválido" }, { status: 400 });
 
   const cur = await prisma.stock.upsert({
