@@ -1,8 +1,11 @@
+// src/app/perfumes/admin/Client.tsx
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { getJSON } from "@/lib/http";
+
 type Categoria = "NICHO" | "ARABES" | "DISEÑADOR" | "OTROS";
+
 type Row = {
   id: string;
   nombre: string;
@@ -12,7 +15,9 @@ type Row = {
   imagenes: string[];
   categoria: Categoria;
   qty: number;
+  descripcion?: string; // ← NUEVO
 };
+
 type ApiPerfumeDTO = {
   id: string;
   nombre: string;
@@ -22,14 +27,17 @@ type ApiPerfumeDTO = {
   imagenes?: unknown;
   categoria?: string;
   stock?: number;
+  descripcion?: string; // ← NUEVO
 };
+
 const CATS = ["NICHO", "ARABES", "DISEÑADOR", "OTROS"] as const;
+
 const S3_BASE = (process.env.NEXT_PUBLIC_S3_BASE ?? "").replace(/\/+$/, "");
 const toUrl = (key: string) => (S3_BASE ? `${S3_BASE}/${key.replace(/^\/+/, "")}` : key);
 
 async function uploadToS3(file: File, brand: string): Promise<string> {
   const q = new URLSearchParams({ filename: file.name, type: file.type, brand });
-const { signedUrl, key } = await getJSON<{ signedUrl:string; key:string }>(`/api/s3/presign?${q}`);
+  const { signedUrl, key } = await getJSON<{ signedUrl: string; key: string }>(`/api/s3/presign?${q}`);
   const put = await fetch(signedUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
   if (!put.ok) throw new Error("S3 upload failed");
   return key;
@@ -40,16 +48,15 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const filePickers = useRef<Record<string, HTMLInputElement | null>>({});
 
-  // Refresco inicial desde API y normalización para evitar inputs no controlados
-    useEffect(() => {
+  // Refresco inicial
+  useEffect(() => {
     fetch("/api/perfumes")
       .then((r) => r.json() as Promise<unknown>)
       .then((raw) => {
         const arr = Array.isArray(raw) ? (raw as unknown[]) : [];
         const norm: Row[] = arr.map((dRaw) => {
           const d = dRaw as Partial<ApiPerfumeDTO>;
-          const imgs =
-            Array.isArray(d.imagenes) ? d.imagenes.filter((x): x is string => typeof x === "string") : [];
+          const imgs = Array.isArray(d.imagenes) ? d.imagenes.filter((x): x is string => typeof x === "string") : [];
           return {
             id: String(d.id ?? ""),
             nombre: String(d.nombre ?? ""),
@@ -59,13 +66,13 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
             imagenes: imgs,
             categoria: (d.categoria as Categoria) ?? "OTROS",
             qty: Number.isFinite(Number(d.stock)) ? Number(d.stock) : 0,
+            descripcion: typeof d.descripcion === "string" ? d.descripcion : "", // ← NUEVO
           };
         });
         setRows(norm);
       })
       .catch(() => {});
   }, []);
-
 
   const setFilePickerRef = (id: string) => (el: HTMLInputElement | null) => {
     filePickers.current[id] = el;
@@ -80,6 +87,9 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
   const setQty = (id: string, qty: number) =>
     setRows((rs) => rs.map((p) => (p.id === id ? { ...p, qty: Math.max(0, qty | 0) } : p)));
 
+  const setDescripcion = (id: string, descripcion: string) =>
+    setRows((rs) => rs.map((p) => (p.id === id ? { ...p, descripcion } : p))); // ← NUEVO
+
   async function savePerfume(id: string) {
     const p = rows.find((x) => x.id === id);
     if (!p) return;
@@ -92,6 +102,7 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
         precio: Number.isFinite(p.precio) ? p.precio : 0,
         categoria: p.categoria,
         imagenes: Array.isArray(p.imagenes) ? p.imagenes : [],
+        descripcion: p.descripcion ?? "", // ← NUEVO
       }),
     }).catch(() => null);
     setSavingId(null);
@@ -149,16 +160,19 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
     if (filePickers.current[id]) filePickers.current[id]!.value = "";
   }
 
- async function del(id: string) {
-  if (!confirm("¿Eliminar este perfume?")) return;
-  const res = await fetch(`/api/perfumes/${encodeURIComponent(id)}`, { method: "DELETE" });
-
-  if (res && res.ok) setRows(rs => rs.filter(p => p.id !== id));
-  else alert("No se pudo eliminar");
-}
+  async function del(id: string) {
+    if (!confirm("¿Eliminar este perfume?")) return;
+    const res = await fetch(`/api/perfumes/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (res && res.ok) setRows((rs) => rs.filter((p) => p.id !== id));
+    else alert("No se pudo eliminar");
+  }
 
   const money = (n: number) =>
-    (Number.isFinite(n) ? n : 0).toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
+    (Number.isFinite(n) ? n : 0).toLocaleString("es-CL", {
+      style: "currency",
+      currency: "CLP",
+      maximumFractionDigits: 0,
+    });
 
   return (
     <main className="px-6 py-8">
@@ -179,8 +193,19 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
             {rows.map((r) => (
               <tr key={r.id} className="border-b align-top">
                 <td className="py-2">
-                  <div className="font-medium">{r.marca} {r.nombre}</div>
+                  <div className="font-medium">
+                    {r.marca} {r.nombre}
+                  </div>
                   <div className="text-xs text-gray-500">{Number.isFinite(r.ml) ? r.ml : 0} ml</div>
+
+                  {/* ← NUEVO: descripción editable */}
+                  <textarea
+                    value={r.descripcion ?? ""}
+                    onChange={(e) => setDescripcion(r.id, e.target.value)}
+                    rows={3}
+                    placeholder="Descripción"
+                    className="mt-2 w-full rounded border px-2 py-1 bg-white text-black"
+                  />
                 </td>
 
                 <td className="py-2">
@@ -200,14 +225,18 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
                     className="rounded border px-2 py-1 bg-white text-black"
                   >
                     {CATS.map((c) => (
-                      <option key={c} value={c}>{c}</option>
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
                     ))}
                   </select>
                 </td>
 
                 <td className="py-2">
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setQty(r.id, (r.qty || 0) - 1)} className="px-2 py-1 rounded border">-</button>
+                    <button onClick={() => setQty(r.id, (r.qty || 0) - 1)} className="px-2 py-1 rounded border">
+                      -
+                    </button>
                     <input
                       type="number"
                       min={0}
@@ -215,7 +244,9 @@ export default function Client({ initialRows }: { initialRows: Row[] }) {
                       onChange={(e) => setQty(r.id, parseInt(e.target.value || "0", 10))}
                       className="w-20 rounded border px-2 py-1 bg-white text-black"
                     />
-                    <button onClick={() => setQty(r.id, (r.qty || 0) + 1)} className="px-2 py-1 rounded border">+</button>
+                    <button onClick={() => setQty(r.id, (r.qty || 0) + 1)} className="px-2 py-1 rounded border">
+                      +
+                    </button>
                   </div>
                 </td>
 

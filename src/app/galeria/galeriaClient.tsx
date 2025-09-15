@@ -334,9 +334,9 @@ export default function GaleriaClient() {
         {lista.length === 0 ? (
           <p className="text-white/80">No se encontraron perfumes con esos filtros.</p>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {lista.map((v: Item) => (
-              <VehicleCard key={v.id} v={v} />
+              <VehicleCard key={v.id} v={v} compact />
             ))}
           </div>
         )}
