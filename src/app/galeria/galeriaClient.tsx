@@ -1,4 +1,3 @@
-// app/galeria/GaleriaClient.tsx
 "use client";
 
 import { useMemo, useEffect, useState, useCallback } from "react";
@@ -23,7 +22,6 @@ function parseFromSearch(sp: ReturnType<typeof useSearchParams>): Filtros {
     q: sp.get("q") || "",
   };
 }
-
 
 /* ====== Config S3 ====== */
 const S3_BASE = (process.env.NEXT_PUBLIC_S3_BASE ?? "").replace(/\/+$/, "");
@@ -61,12 +59,10 @@ export default function GaleriaClient() {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
+  const [page, setPage] = useState(1);
+  const perfumesPorPagina = 16;
 
-  const readArr = (key: string) =>
-    (sp.get(key)?.split(",").map(s => s.trim()).filter(Boolean)) || [];
-
-    const initial = useMemo(() => parseFromSearch(sp), [sp]);
-
+  const initial = useMemo(() => parseFromSearch(sp), [sp]);
 
   const [items, setItems] = useState<Item[]>([]);
 
@@ -102,7 +98,7 @@ export default function GaleriaClient() {
     priceMax: initial.priceMax ?? (bounds.precioMax ?? null),
   }));
 
-   useEffect(() => {
+  useEffect(() => {
     const next = parseFromSearch(sp);
     setFiltros(f => ({
       ...f,
@@ -157,7 +153,23 @@ export default function GaleriaClient() {
     };
   }, [items, aplicarFiltros]);
 
-  const lista = useMemo(() => aplicarFiltros(items), [items, aplicarFiltros]);
+  const listaFiltrada = useMemo(() => aplicarFiltros(items), [items, aplicarFiltros]);
+
+  // Paginación
+  const totalPaginas = Math.ceil(listaFiltrada.length / perfumesPorPagina);
+  const lista = useMemo(
+    () =>
+      listaFiltrada.slice(
+        (page - 1) * perfumesPorPagina,
+        page * perfumesPorPagina
+      ),
+    [listaFiltrada, page]
+  );
+
+  // Resetear a la primera página si cambian los filtros
+  useEffect(() => {
+    setPage(1);
+  }, [filtros, listaFiltrada.length]);
 
   const toggleMarca = (value: string) =>
     setFiltros(f => {
@@ -195,15 +207,20 @@ export default function GaleriaClient() {
     !!filtros.q ||
     filtros.priceMin != null ||
     filtros.priceMax != null;
-    const hrefAplicar = useMemo(() => {
-  const qp = new URLSearchParams();
-  if (filtros.q) qp.set("q", filtros.q);
-  if (filtros.marcas.length) qp.set("marcas", filtros.marcas.join(","));
-  if (filtros.tipos.length) qp.set("tipos", filtros.tipos.join(","));
-  if (filtros.priceMin != null) qp.set("priceMin", String(filtros.priceMin));
-  if (filtros.priceMax != null) qp.set("priceMax", String(filtros.priceMax));
-  return `/galeria?${qp.toString()}`;
-}, [filtros]);
+
+  const hrefAplicar = useMemo(() => {
+    const qp = new URLSearchParams();
+    if (filtros.q) qp.set("q", filtros.q);
+    if (filtros.marcas.length) qp.set("marcas", filtros.marcas.join(","));
+    if (filtros.tipos.length) qp.set("tipos", filtros.tipos.join(","));
+    if (filtros.priceMin != null) qp.set("priceMin", String(filtros.priceMin));
+    if (filtros.priceMax != null) qp.set("priceMax", String(filtros.priceMax));
+    return `/galeria?${qp.toString()}`;
+  }, [filtros]);
+
+  // Buscador por nombre de perfume (además del filtro actual)
+  // El filtro por nombre ya está implementado en filtros.q, pero puedes agregar un input visible arriba
+  // para mejorar la experiencia de usuario.
 
   return (
     <main className="pt-28 md:pt-36 min-h-screen bg-gradient-to-b from-blue-600 to-indigo-800 text-white">
@@ -226,6 +243,17 @@ export default function GaleriaClient() {
           Filtra y encuentra tu fragancia.
         </motion.p>
       </section>
+
+      {/* Buscador por nombre */}
+      <div className="max-w-2xl mx-auto px-4 mb-6">
+        <input
+          type="text"
+          value={filtros.q}
+          onChange={e => setFiltros(f => ({ ...f, q: e.target.value }))}
+          placeholder="Buscar perfume por nombre..."
+          className="w-full px-4 py-2 rounded-lg bg-white/10 placeholder-white/60 text-white"
+        />
+      </div>
 
       {/* CONTENIDO */}
       <section className="py-8 px-6 md:px-16 max-w-7xl mx-auto">
@@ -321,9 +349,9 @@ export default function GaleriaClient() {
                     href={hrefAplicar}
                     onClick={() => setShowFilters(false)}
                     className="px-4 py-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600"
-                    >
+                  >
                     Aplicar
-                    </Link>
+                  </Link>
                 </div>
               </div>
             </motion.div>
@@ -334,11 +362,43 @@ export default function GaleriaClient() {
         {lista.length === 0 ? (
           <p className="text-white/80">No se encontraron perfumes con esos filtros.</p>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {lista.map((v: Item) => (
-              <VehicleCard key={v.id} v={v} compact />
-            ))}
-          </div>
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {lista.map((v: Item) => (
+                <VehicleCard key={v.id} v={v} compact />
+              ))}
+            </div>
+            {/* Paginador */}
+            {totalPaginas > 1 && (
+              <div className="flex justify-center items-center gap-2 mt-8">
+                <button
+                  onClick={() => setPage(page - 1)}
+                  disabled={page === 1}
+                  className="px-2 py-1 border rounded disabled:opacity-50"
+                >
+                  {"<"}
+                </button>
+                {Array.from({ length: totalPaginas }, (_, i) => i + 1).map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setPage(n)}
+                    className={`px-3 py-1 border rounded ${
+                      n === page ? "bg-blue-500 text-white" : ""
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setPage(page + 1)}
+                  disabled={page === totalPaginas}
+                  className="px-2 py-1 border rounded disabled:opacity-50"
+                >
+                  {">"}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </section>
     </main>
