@@ -7,7 +7,8 @@ const brands = [
   { src: "/brands/lattafa-logo.svg", alt: "Lattafa" },
   {src: "/brands/Dior_Logo.svg", alt: "Dior" },
   {src: "/brands/giorgio-armani.svg", alt: "Giorgio" },
-  {src: "/brands/Valentino_logo.svg", alt: "Valentino" }
+  {src: "/brands/Valentino_logo.svg", alt: "Valentino" },
+  {src: "/brands/Jean_Paul_Gaultier_logo.svg", alt: "Jean_Paul_Gaultier_logo" },
 ];
 
 const REPEAT = 6; // súbelo si aún ves huecos
@@ -20,15 +21,39 @@ export default function BrandMarquee() {
       <motion.div
         className="flex items-center gap-10 py-6 min-w-max"
         animate={{ x: ["0%", "-50%"] }}
-        transition={{ duration: 18, repeat: Infinity, ease: "linear" }}
+        transition={{ duration: 50, repeat: Infinity, ease: "linear" }}
       >
         {/* bloque A */}
         {seq.map((b, i) => (
-          <img key={`a-${i}-${b.alt}`} src={b.src} alt={b.alt} title={b.alt} className="h-8 md:h-10 w-auto opacity-80 hover:opacity-100 transition" />
+          <div
+            key={`a-${i}-${b.alt}`}
+            className="flex items-center justify-center h-12 w-28 bg-white"
+            style={{ minWidth: "7rem" }}
+          >
+            <img
+              src={b.src}
+              alt={b.alt}
+              title={b.alt}
+              className="h-10 w-24 object-contain opacity-80 hover:opacity-100 transition"
+              style={{ maxHeight: "2.5rem", maxWidth: "6rem" }}
+            />
+          </div>
         ))}
         {/* bloque B idéntico para loop continuo */}
         {seq.map((b, i) => (
-          <img aria-hidden key={`b-${i}-${b.alt}`} src={b.src} alt="" className="h-8 md:h-10 w-auto opacity-80 transition" />
+          <div
+            key={`b-${i}-${b.alt}`}
+            className="flex items-center justify-center h-12 w-28 bg-white"
+            style={{ minWidth: "7rem" }}
+            aria-hidden
+          >
+            <img
+              src={b.src}
+              alt=""
+              className="h-10 w-24 object-contain opacity-80 transition"
+              style={{ maxHeight: "2.5rem", maxWidth: "6rem" }}
+            />
+          </div>
         ))}
       </motion.div>
     </div>

@@ -3,8 +3,7 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { Car, Menu, X, Phone } from "lucide-react";
-import MegaMenuAutos from "@/components/MegaMenuAutos";
+import {  Menu, X, Phone } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 
 const MotionLink = motion.create(Link);
@@ -63,8 +62,10 @@ export default function Navbar() {
               onBlur={hideAutos}
               className="relative"
             />
+            <NavLink href="/">Inicio</NavLink>
             <NavLink href="/galeria?tipos=DISEÑADOR&priceMin=19990&priceMax=300000">Perfumes Diseñador</NavLink>
             <NavLink href="/galeria?tipos=ARABES&priceMin=19990&priceMax=300000">Perfumes Árabes</NavLink>
+            <NavLink href="/galeria">Nuestros perfumes</NavLink>
             <NavLink href="/contact">Contacto</NavLink>
 
             {session ? (
@@ -111,7 +112,6 @@ export default function Navbar() {
           </button>
         </div>
 
-        <MegaMenuAutos open={hoverAutos} onEnter={showAutos} onLeave={hideAutos} />
 
         {/* Móvil */}
         {open && (
