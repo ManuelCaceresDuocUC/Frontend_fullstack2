@@ -21,11 +21,11 @@ export default async function Page({
 
   const perfume = await prisma.perfume.findUnique({
     where: { id },
-    include: { stock: true },
+    include: { Stock: true },
   });
   if (!perfume) notFound();
 
-  const qty = Number(perfume.stock?.qty ?? 0);
+  const qty = Number(perfume.Stock?.qty ?? 0);
 
   const p = {
     id: perfume.id,
