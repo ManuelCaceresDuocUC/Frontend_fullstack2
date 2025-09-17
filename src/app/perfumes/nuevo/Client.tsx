@@ -20,7 +20,7 @@ const isCategoria = (x: unknown): x is Categoria =>
 const GENEROS = ["HOMBRE", "MUJER", "UNISEX"] as const;
 type Genero = (typeof GENEROS)[number];
 const isGenero = (x: unknown): x is Genero =>
-  GENEROS.includes(String(x) as Genero);
+  GENEROS.includes(String(x).toUpperCase() as Genero);
 
 // Upload S3
 async function uploadToS3(file: File, brand: string): Promise<{ key: string }> {
@@ -61,7 +61,7 @@ export default function Client() {
     const categoria: Categoria = isCategoria(rawCat) ? (String(rawCat) as Categoria) : "OTROS";
 
     const rawGenero = fd.get("genero");
-    const genero: Genero = isGenero(rawGenero) ? (String(rawGenero) as Genero) : "UNISEX";
+    const genero: Genero = isGenero(rawGenero) ? (String(rawGenero).toUpperCase() as Genero) : "UNISEX";
 
     const body = {
       nombre: String(fd.get("nombre") ?? "").trim(),
@@ -69,7 +69,7 @@ export default function Client() {
       ml: Number(fd.get("ml")),
       precio: Number(fd.get("precio")),
       categoria,
-      genero, // ← nuevo
+      genero,
       descripcion: String(fd.get("descripcion") ?? "").trim(),
       imagenes: keys,
     };
@@ -86,90 +86,43 @@ export default function Client() {
     else alert("Error al publicar");
   }
 
+  const money = (n: number) =>
+    (Number.isFinite(n) ? n : 0).toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
+
   return (
     <main className="pt-28 md:pt-36 min-h-[70vh] px-4 py-16 bg-gradient-to-b from-blue-600 to-indigo-800 text-white">
       <div className="max-w-2xl mx-auto rounded-2xl border border-white/20 bg-white/10 backdrop-blur p-6">
-        {/* Header + apartado admin */}
         <div className="mb-4 flex items-center justify-between gap-3">
           <h1 className="text-3xl font-extrabold">Publicar perfume</h1>
-          <Link
-            href="/perfumes/admin"
-            className="px-4 py-2 rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20"
-            aria-label="Ir al panel de administración de perfumes"
-          >
+          <Link href="/perfumes/admin" className="px-4 py-2 rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20">
             Ir a admin
           </Link>
-          <Link
-            href="/admin/pedidos"
-            className="px-4 py-2 rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20"
-            aria-label="Ir al panel de administración de pedidos"
-          >
+          <Link href="/admin/pedidos" className="px-4 py-2 rounded-2xl border border-white/20 bg-white/10 hover:bg-white/20">
             Ir a pedidos
           </Link>
         </div>
 
         <form onSubmit={onSubmit} className="grid gap-4">
           <div className="grid grid-cols-2 gap-3">
-            <input
-              name="nombre"
-              required
-              placeholder="Nombre"
-              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
-            />
-            <input
-              name="marca"
-              required
-              placeholder="Marca"
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
-            />
-            <input
-              name="ml"
-              type="number"
-              min={1}
-              required
-              placeholder="ML"
-              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
-            />
-            <input
-              name="precio"
-              type="number"
-              min={0}
-              required
-              placeholder="Precio (CLP)"
-              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
-            />
+            <input name="nombre" required placeholder="Nombre" className="rounded-xl border border-white/20 bg-white/10 px-3 py-2" />
+            <input name="marca" required placeholder="Marca" value={brand} onChange={(e) => setBrand(e.target.value)} className="rounded-xl border border-white/20 bg-white/10 px-3 py-2" />
+            <input name="ml" type="number" min={1} required placeholder="ML" className="rounded-xl border border-white/20 bg-white/10 px-3 py-2" />
+            <input name="precio" type="number" min={0} required placeholder="Precio (CLP)" className="rounded-xl border border-white/20 bg-white/10 px-3 py-2" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {/* Categoría */}
-            <select
-              name="categoria"
-              defaultValue="OTROS"
-              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
-            >
+            <select name="categoria" defaultValue="OTROS" className="rounded-xl border border-white/20 bg-white/10 px-3 py-2">
               {CATS.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
+                <option key={c} value={c}>{c}</option>
               ))}
             </select>
 
-            {/* Género */}
-            <select
-              name="genero"
-              defaultValue="UNISEX"
-              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
-            >
+            <select name="genero" defaultValue="UNISEX" className="rounded-xl border border-white/20 bg-white/10 px-3 py-2">
               {GENEROS.map((g) => (
-                <option key={g} value={g}>
-                  {g}
-                </option>
+                <option key={g} value={g}>{g}</option>
               ))}
             </select>
 
-            {/* Descripción */}
             <textarea
               name="descripcion"
               rows={4}
@@ -192,12 +145,13 @@ export default function Client() {
             )}
           </div>
 
-          <button
-            disabled={loading}
-            className="bg-amber-300 text-black py-3 rounded-2xl font-semibold hover:bg-yellow-300 disabled:opacity-60"
-          >
+          <button disabled={loading} className="bg-amber-300 text-black py-3 rounded-2xl font-semibold hover:bg-yellow-300 disabled:opacity-60">
             {loading ? "Publicando…" : "Publicar"}
           </button>
+
+          <div className="text-xs text-white/70">
+            Previsualización precio: <span>{money(Number((document.querySelector('input[name="precio"]') as HTMLInputElement)?.value) || 0)}</span>
+          </div>
         </form>
       </div>
     </main>
