@@ -131,9 +131,8 @@ export default function Navbar() {
 </div>
           {/* Enlaces existentes */}
           <NavLink href="/">Inicio</NavLink>
-          <NavLink href="/galeria?tipos=DISEÑADOR&priceMin=19990&priceMax=300000">Perfumes Diseñador</NavLink>
-          <NavLink href="/galeria?tipos=ARABES&priceMin=19990&priceMax=300000">Perfumes Árabes</NavLink>
-          <NavLink href="/galeria">Nuestros perfumes</NavLink>
+          
+          
           <NavLink href="/contact">Contacto</NavLink>
 
           {/* Sesión */}
