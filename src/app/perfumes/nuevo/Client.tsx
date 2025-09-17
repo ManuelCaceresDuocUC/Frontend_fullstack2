@@ -6,17 +6,26 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { getJSON } from "@/lib/http";
+
 const S3_BASE = (process.env.NEXT_PUBLIC_S3_BASE ?? "").replace(/\/+$/, "");
 const toUrl = (key: string) => (S3_BASE ? `${S3_BASE}/${key.replace(/^\/+/, "")}` : key);
-const CATS = ["NICHO","ARABES","DISEÑADOR","OTROS"] as const;
-type Categoria = typeof CATS[number];
 
+// Categorías
+const CATS = ["NICHO", "ARABES", "DISEÑADOR", "OTROS"] as const;
+type Categoria = (typeof CATS)[number];
 const isCategoria = (x: unknown): x is Categoria =>
   CATS.includes(String(x) as Categoria);
 
+// Género
+const GENEROS = ["MASCULINO", "FEMENINO", "UNISEX"] as const;
+type Genero = (typeof GENEROS)[number];
+const isGenero = (x: unknown): x is Genero =>
+  GENEROS.includes(String(x) as Genero);
+
+// Upload S3
 async function uploadToS3(file: File, brand: string): Promise<{ key: string }> {
   const q = new URLSearchParams({ filename: file.name, type: file.type, brand });
-const { signedUrl, key } = await getJSON<{ signedUrl:string; key:string }>(`/api/s3/presign?${q}`);
+  const { signedUrl, key } = await getJSON<{ signedUrl: string; key: string }>(`/api/s3/presign?${q}`);
   const put = await fetch(signedUrl, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
   if (!put.ok) throw new Error("S3 upload failed");
   return { key };
@@ -38,17 +47,21 @@ export default function Client() {
         const { key } = await uploadToS3(f, brand || "misc");
         uploaded.push(key);
       }
-      setKeys(prev => [...prev, ...uploaded]);
+      setKeys((prev) => [...prev, ...uploaded]);
     } finally {
       setLoading(false);
     }
   }
 
-   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+
     const rawCat = fd.get("categoria");
     const categoria: Categoria = isCategoria(rawCat) ? (String(rawCat) as Categoria) : "OTROS";
+
+    const rawGenero = fd.get("genero");
+    const genero: Genero = isGenero(rawGenero) ? (String(rawGenero) as Genero) : "UNISEX";
 
     const body = {
       nombre: String(fd.get("nombre") ?? "").trim(),
@@ -56,7 +69,8 @@ export default function Client() {
       ml: Number(fd.get("ml")),
       precio: Number(fd.get("precio")),
       categoria,
-      descripcion: String(fd.get("descripcion") ?? "").trim(), // ← NUEVO
+      genero, // ← nuevo
+      descripcion: String(fd.get("descripcion") ?? "").trim(),
       imagenes: keys,
     };
 
@@ -71,6 +85,7 @@ export default function Client() {
     if (res.ok) router.push("/galeria");
     else alert("Error al publicar");
   }
+
   return (
     <main className="pt-28 md:pt-36 min-h-[70vh] px-4 py-16 bg-gradient-to-b from-blue-600 to-indigo-800 text-white">
       <div className="max-w-2xl mx-auto rounded-2xl border border-white/20 bg-white/10 backdrop-blur p-6">
@@ -95,24 +110,74 @@ export default function Client() {
 
         <form onSubmit={onSubmit} className="grid gap-4">
           <div className="grid grid-cols-2 gap-3">
-            <input name="nombre" required placeholder="Nombre" className="rounded-xl border border-white/20 bg-white/10 px-3 py-2" />
-            <input name="marca" required placeholder="Marca" value={brand} onChange={(e) => setBrand(e.target.value)} className="rounded-xl border border-white/20 bg-white/10 px-3 py-2" />
-            <input name="ml" type="number" min={1} required placeholder="ML" className="rounded-xl border border-white/20 bg-white/10 px-3 py-2" />
-            <input name="precio" type="number" min={0} required placeholder="Precio (CLP)" className="rounded-xl border border-white/20 bg-white/10 px-3 py-2" />
+            <input
+              name="nombre"
+              required
+              placeholder="Nombre"
+              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
+            />
+            <input
+              name="marca"
+              required
+              placeholder="Marca"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
+            />
+            <input
+              name="ml"
+              type="number"
+              min={1}
+              required
+              placeholder="ML"
+              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
+            />
+            <input
+              name="precio"
+              type="number"
+              min={0}
+              required
+              placeholder="Precio (CLP)"
+              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
+            />
           </div>
-                  <div className="grid grid-cols-2 gap-3">
-          {/* ...nombre, marca, ml, precio... */}
-          <select name="categoria" defaultValue="OTROS"
-  className="rounded-xl border border-white/20 bg-white/10 px-3 py-2">
-  {CATS.map(c => <option key={c} value={c}>{c}</option>)}
-</select>
-<textarea
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* Categoría */}
+            <select
+              name="categoria"
+              defaultValue="OTROS"
+              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
+            >
+              {CATS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+
+            {/* Género */}
+            <select
+              name="genero"
+              defaultValue="UNISEX"
+              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2"
+            >
+              {GENEROS.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+
+            {/* Descripción */}
+            <textarea
               name="descripcion"
               rows={4}
               placeholder="Descripción del perfume (notas, uso, estacionalidad)"
-              className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-white placeholder-white/60"
+              className="col-span-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-white placeholder-white/60"
             />
-        </div>
+          </div>
+
           <div>
             <label className="block text-sm mb-1">Imágenes (S3)</label>
             <input type="file" accept="image/*" multiple onChange={onFiles} className="block w-full text-white" />
@@ -127,7 +192,10 @@ export default function Client() {
             )}
           </div>
 
-          <button disabled={loading} className="bg-amber-300 text-black py-3 rounded-2xl font-semibold hover:bg-yellow-300 disabled:opacity-60">
+          <button
+            disabled={loading}
+            className="bg-amber-300 text-black py-3 rounded-2xl font-semibold hover:bg-yellow-300 disabled:opacity-60"
+          >
             {loading ? "Publicando…" : "Publicar"}
           </button>
         </form>
