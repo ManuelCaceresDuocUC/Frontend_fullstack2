@@ -6,18 +6,17 @@ import { getJSON } from "@/lib/http";
 
 type Categoria = "NICHO" | "ARABES" | "DISEÑADOR" | "OTROS";
 
-type Row = {
+export type Row = {             // ← agrega "export"
   id: string;
   nombre: string;
   marca: string;
   ml: number;
   precio: number;
   imagenes: string[];
-  categoria: Categoria;
+  categoria: "NICHO" | "ARABES" | "DISEÑADOR" | "OTROS";
   qty: number;
-  descripcion?: string; // ← NUEVO
+  descripcion?: string;
 };
-
 type ApiPerfumeDTO = {
   id: string;
   nombre: string;
