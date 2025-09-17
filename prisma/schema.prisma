@@ -57,6 +57,8 @@ model Perfume {
   isDecant    Boolean          @default(false)
   genero      Genero           @default(UNISEX)
   description String?          @default("")
+  images      Json?           
+  createdBy   String?
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
