@@ -1,22 +1,35 @@
 "use client";
 
-import { useMemo, useEffect, useState, useCallback } from "react";
+import { useMemo, useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import VehicleCard, { Vehiculo } from "@/components/VehicleCard";
 import Link from "next/link";
 
-/* ====== Categorías ====== */
+/* ====== Categorías y Géneros ====== */
 const CATS = ["NICHO", "ARABES", "DISEÑADOR", "OTROS"] as const;
 type Categoria = typeof CATS[number];
+type Genero = "HOMBRE" | "MUJER" | "UNISEX";
+
+/* ====== Filtros ====== */
+type Filtros = {
+  marcas: string[];
+  tipos: Categoria[];
+  generos: Genero[];
+  priceMin: number | null;
+  priceMax: number | null;
+  q: string;
+};
 
 function parseFromSearch(sp: ReturnType<typeof useSearchParams>): Filtros {
   const readArr = (key: string) =>
     (sp.get(key)?.split(",").map(s => s.trim()).filter(Boolean)) || [];
   const tipos = readArr("tipos").filter(v => CATS.includes(v as Categoria)) as Categoria[];
+  const generos = readArr("genero").filter(v => ["HOMBRE", "MUJER", "UNISEX"].includes(v)) as Genero[];
   return {
     marcas: readArr("marcas"),
     tipos,
+    generos,
     priceMin: sp.get("priceMin") ? Number(sp.get("priceMin")) : null,
     priceMax: sp.get("priceMax") ? Number(sp.get("priceMax")) : null,
     q: sp.get("q") || "",
@@ -41,19 +54,11 @@ type ApiPerfume = {
   imagen?: string;
   imagenes?: string[];
   categoria?: Categoria;
+  genero?: Genero;
 };
 
-/* ====== Item local: Vehiculo + categoría ====== */
-type Item = Vehiculo & { categoria?: Categoria };
-
-/* ====== Filtros ====== */
-type Filtros = {
-  marcas: string[];
-  tipos: Categoria[];
-  priceMin: number | null;
-  priceMax: number | null;
-  q: string;
-};
+/* ====== Item local: Vehiculo + categoría + género ====== */
+type Item = Vehiculo & { categoria?: Categoria; genero?: Genero };
 
 export default function GaleriaClient() {
   const router = useRouter();
@@ -78,6 +83,7 @@ export default function GaleriaClient() {
           ml: p.ml,
           precio: p.precio ?? 0,
           categoria: p.categoria ?? "OTROS",
+          genero: p.genero ?? "UNISEX",
           imagen: resolveImg(p.imagenes?.[0] ?? p.imagen) || FALLBACK_IMG,
         }));
         setItems(mapped);
@@ -96,6 +102,7 @@ export default function GaleriaClient() {
     ...initial,
     priceMin: initial.priceMin ?? (bounds.precioMin ?? null),
     priceMax: initial.priceMax ?? (bounds.precioMax ?? null),
+    generos: initial.generos ?? [],
   }));
 
   useEffect(() => {
@@ -105,6 +112,7 @@ export default function GaleriaClient() {
       ...next,
       priceMin: next.priceMin ?? (bounds.precioMin ?? null),
       priceMax: next.priceMax ?? (bounds.precioMax ?? null),
+      generos: next.generos ?? [],
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sp, bounds.precioMin, bounds.precioMax]);
@@ -115,6 +123,7 @@ export default function GaleriaClient() {
     return {
       marcas: uniq(items.map(v => v.marca)),
       tipos: CATS.slice(),
+      generos: ["HOMBRE", "MUJER", "UNISEX"] as Genero[],
     };
   }, [items]);
 
@@ -123,6 +132,7 @@ export default function GaleriaClient() {
       base.filter(v => {
         if (filtros.marcas.length && !filtros.marcas.includes(v.marca ?? "")) return false;
         if (filtros.tipos.length && !filtros.tipos.includes((v.categoria as Categoria) ?? "OTROS")) return false;
+        if (filtros.generos.length && !filtros.generos.includes((v.genero as Genero) ?? "UNISEX")) return false;
         if (filtros.priceMin != null && (v.precio ?? 0) < filtros.priceMin) return false;
         if (filtros.priceMax != null && (v.precio ?? 0) > filtros.priceMax) return false;
         if (filtros.q) {
@@ -149,6 +159,7 @@ export default function GaleriaClient() {
     return {
       marcas: countBy(base, v => (v as Item).marca),
       categorias: countBy(base, v => (v as Item).categoria),
+      generos: countBy(base, v => (v as Item).genero),
       resultados: base.length,
     };
   }, [items, aplicarFiltros]);
@@ -185,6 +196,13 @@ export default function GaleriaClient() {
       return { ...f, tipos: Array.from(set) as Categoria[] };
     });
 
+  const toggleGenero = (value: Genero) =>
+    setFiltros(f => {
+      const set = new Set(f.generos);
+      set.has(value) ? set.delete(value) : set.add(value);
+      return { ...f, generos: Array.from(set) as Genero[] };
+    });
+
   const setRange = (key: keyof Pick<Filtros, "priceMin" | "priceMax">, value: number | null) =>
     setFiltros(f => ({ ...f, [key]: value }));
 
@@ -192,6 +210,7 @@ export default function GaleriaClient() {
     setFiltros({
       marcas: [],
       tipos: [],
+      generos: [],
       priceMin: bounds.precioMin ?? null,
       priceMax: bounds.precioMax ?? null,
       q: "",
@@ -204,6 +223,7 @@ export default function GaleriaClient() {
   const hasAnyFilter =
     filtros.marcas.length > 0 ||
     filtros.tipos.length > 0 ||
+    filtros.generos.length > 0 ||
     !!filtros.q ||
     filtros.priceMin != null ||
     filtros.priceMax != null;
@@ -213,14 +233,11 @@ export default function GaleriaClient() {
     if (filtros.q) qp.set("q", filtros.q);
     if (filtros.marcas.length) qp.set("marcas", filtros.marcas.join(","));
     if (filtros.tipos.length) qp.set("tipos", filtros.tipos.join(","));
+    if (filtros.generos.length) qp.set("genero", filtros.generos.join(","));
     if (filtros.priceMin != null) qp.set("priceMin", String(filtros.priceMin));
     if (filtros.priceMax != null) qp.set("priceMax", String(filtros.priceMax));
     return `/galeria?${qp.toString()}`;
   }, [filtros]);
-
-  // Buscador por nombre de perfume (además del filtro actual)
-  // El filtro por nombre ya está implementado en filtros.q, pero puedes agregar un input visible arriba
-  // para mejorar la experiencia de usuario.
 
   return (
     <main className="pt-28 md:pt-36 min-h-screen bg-gradient-to-b from-blue-600 to-indigo-800 text-white">
@@ -275,6 +292,9 @@ export default function GaleriaClient() {
             {filtros.tipos.map(t => (
               <Chip key={`t-${t}`} label={`Categoría: ${t}`} onClear={() => toggleTipo(t)} />
             ))}
+            {filtros.generos.map(g => (
+              <Chip key={`g-${g}`} label={`Género: ${g}`} onClear={() => toggleGenero(g)} />
+            ))}
             {(filtros.priceMin != null || filtros.priceMax != null) && (
               <span className="px-3 py-1 rounded-full border border-white/15 bg-white/10 text-sm">
                 Precio: {filtros.priceMin?.toLocaleString("es-CL") ?? "0"} –{" "}
@@ -300,7 +320,7 @@ export default function GaleriaClient() {
               transition={{ duration: 0.25 }}
               className="overflow-hidden"
             >
-              <div className="bg-white/10 rounded-2xl p-4 grid md:grid-cols-4 gap-6 mb-8">
+              <div className="bg-white/10 rounded-2xl p-4 grid md:grid-cols-5 gap-6 mb-8">
                 <div className="md:col-span-1">
                   <input
                     value={filtros.q}
@@ -326,6 +346,14 @@ export default function GaleriaClient() {
                   onToggle={(v) => toggleTipo(v as Categoria)}
                 />
 
+                <Facet
+                  titulo="Género"
+                  opciones={opciones.generos}
+                  seleccionadas={filtros.generos}
+                  counts={facetCounts.generos}
+                  onToggle={(v) => toggleGenero(v as Genero)}
+                />
+
                 <RangeGroup
                   titulo="Precio (CLP)"
                   min={bounds.precioMin}
@@ -337,7 +365,7 @@ export default function GaleriaClient() {
                   step={1000}
                 />
 
-                <div className="md:col-span-4 flex gap-3">
+                <div className="md:col-span-5 flex gap-3">
                   <button
                     onClick={clearAll}
                     className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20"

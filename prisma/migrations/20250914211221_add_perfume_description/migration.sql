@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS _prisma_noop (id INT PRIMARY KEY) ENGINE=InnoDB; DROP TABLE _prisma_noop;
