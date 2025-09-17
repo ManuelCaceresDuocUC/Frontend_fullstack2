@@ -7,19 +7,63 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Genero {
+  HOMBRE
+  MUJER
+  UNISEX
+}
+
+enum Perfume_category {
+  NICHO
+  ARABES
+  DISENADOR
+  OTROS
+}
+
+enum User_role {
+  USER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  INITIATED
+  AUTHORIZED
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  WEBPAY
+  SERVIPAG
+  MANUAL
+}
+
 model Perfume {
   id          String           @id @default(cuid())
   name        String
   brand       String
   ml          Int
   price       Int
-  images      Json
-  createdBy   String?
+  tipo        Perfume_category
+  isDecant    Boolean          @default(false)
+  genero      Genero           @default(UNISEX)
+  description String?          @default("")
   createdAt   DateTime         @default(now())
-  category    Perfume_category @default(OTROS)
-  description String?          @db.Text
-  stock       Stock?
-  OrderItem   OrderItem[]
+  updatedAt   DateTime         @updatedAt
+
+  Stock     Stock?
+  OrderItem OrderItem[]
+
+  @@index([genero, tipo, isDecant])
 }
 
 model Stock {
@@ -55,9 +99,10 @@ model Order {
   status         OrderStatus @default(PENDING)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
-  items          OrderItem[]
-  payment        Payment?
-  shipment       Shipment?
+
+  items    OrderItem[]
+  payment  Payment?
+  shipment Shipment?
 
   @@index([status])
   @@index([createdAt])
@@ -65,7 +110,7 @@ model Order {
 }
 
 model OrderItem {
-  id        String  @id @default(cuid())
+  id        String @id @default(cuid())
   orderId   String
   perfumeId String
   name      String
@@ -73,8 +118,9 @@ model OrderItem {
   ml        Int
   unitPrice Int
   qty       Int
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  perfume   Perfume @relation(fields: [perfumeId], references: [id], onDelete: Cascade)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  perfume Perfume @relation(fields: [perfumeId], references: [id], onDelete: Cascade)
 
   @@index([orderId], map: "order_items_orderId_fkey")
   @@index([perfumeId], map: "order_items_perfumeId_fkey")
@@ -90,7 +136,8 @@ model Payment {
   amount       Int
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
-  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("payments")
 }
@@ -103,41 +150,8 @@ model Shipment {
   delivered Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("shipments")
-}
-
-enum User_role {
-  USER
-  ADMIN
-}
-
-enum Perfume_category {
-  NICHO
-  ARABES
-  DISENADOR
-  OTROS
-}
-
-enum OrderStatus {
-  PENDING
-  PAID
-  FULFILLED
-  CANCELLED
-  REFUNDED
-}
-
-enum PaymentStatus {
-  INITIATED
-  AUTHORIZED
-  PAID
-  FAILED
-  REFUNDED
-}
-
-enum PaymentMethod {
-  WEBPAY
-  SERVIPAG
-  MANUAL
 }
