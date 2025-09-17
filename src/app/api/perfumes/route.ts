@@ -1,13 +1,15 @@
 // src/app/api/perfumes/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Prisma, type Perfume, type Perfume_category } from "@prisma/client";
+import { Prisma, type Perfume, type Perfume_category, type Genero, type Stock } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/* tipos */
+/* Tipos API */
 type CategoriaApi = "NICHO" | "ARABES" | "DISEÑADOR" | "OTROS";
+type GeneroApi = "HOMBRE" | "MUJER" | "UNISEX";
+
 type PerfumeInput = {
   nombre: string;
   marca: string;
@@ -15,8 +17,10 @@ type PerfumeInput = {
   precio: number;
   imagenes?: string[];
   categoria?: CategoriaApi | string;
+  genero?: GeneroApi | string;
   descripcion?: string;
 };
+
 type ApiPerfume = {
   id: string;
   nombre: string;
@@ -31,26 +35,36 @@ type ApiPerfume = {
   descripcion: string;
 };
 
-/* utils */
+/* Utils */
 const norm = (s: unknown) =>
-  String(s ?? "").normalize("NFD").replace(/\p{Diacritic}/gu, "").toUpperCase();
+  String(s ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toUpperCase();
 
 const apiToDbCat = (c: unknown): Perfume_category => {
   const u = norm(c);
   if (u === "NICHO") return "NICHO";
   if (u === "ARABES") return "ARABES";
-  if (u === "DISENADOR" || u === "DISENADOR") return "DISENADOR"; // tolera “DISEÑADOR”
+  if (u === "DISENADOR") return "DISENADOR"; // “DISEÑADOR” → “DISENADOR”
   return "OTROS";
 };
 
 const dbToApiCat = (c: Perfume_category): CategoriaApi =>
   c === "DISENADOR" ? "DISEÑADOR" : (c as CategoriaApi);
 
+const apiToDbGenero = (g: unknown): Genero => {
+  const u = norm(g); // "hombre" → "HOMBRE"
+  if (u === "HOMBRE") return "HOMBRE";
+  if (u === "MUJER") return "MUJER";
+  return "UNISEX";
+};
+
 const jsonToStringArray = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 
-/* mapeo */
-type PerfumeRow = Perfume & { Stock?: { qty: number } | null };
+/* Mapeo */
+type PerfumeRow = Perfume & { Stock?: Stock | null };
 
 const toApi = (p: PerfumeRow): ApiPerfume => {
   const imgs = jsonToStringArray(p.images as unknown);
@@ -62,29 +76,32 @@ const toApi = (p: PerfumeRow): ApiPerfume => {
     precio: p.price,
     imagenes: imgs,
     imagen: imgs[0] ?? null,
-    categoria: dbToApiCat(p.tipo),        // ← antes usaba p.category
+    categoria: dbToApiCat(p.tipo),
     createdAt: p.createdAt.toISOString(),
-stock: p.Stock?.qty ?? 0,
+    stock: p.Stock?.qty ?? 0,
     descripcion: p.description ?? "",
   };
 };
 
-/* GET /api/perfumes[?id][&categoria] */
+/* GET /api/perfumes[?id][&categoria][&genero] */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   const catParam = searchParams.get("categoria");
-  const dbCat = catParam ? apiToDbCat(catParam) : undefined;
+  const genParam = searchParams.get("genero");
 
   if (id) {
     const p = await prisma.perfume.findUnique({
       where: { id },
-include: { Stock: true },
+      include: { Stock: true },
     });
     return NextResponse.json(p ? toApi(p as PerfumeRow) : null);
   }
 
-  const where: Prisma.PerfumeWhereInput = dbCat ? { tipo: dbCat } : {}; // ← antes category
+  const where: Prisma.PerfumeWhereInput = {};
+  if (catParam) where.tipo = apiToDbCat(catParam);
+  if (genParam) where.genero = apiToDbGenero(genParam);
+
   const list = await prisma.perfume.findMany({
     where,
     orderBy: { createdAt: "desc" },
@@ -101,16 +118,14 @@ export async function POST(req: Request) {
     const brand = String(b.marca ?? "").trim();
     const ml = Number(b.ml);
     const price = Number(b.precio);
-    const images = Array.isArray(b.imagenes)
-      ? b.imagenes.filter((x): x is string => typeof x === "string")
-      : [];
+    const images = Array.isArray(b.imagenes) ? b.imagenes.filter((x): x is string => typeof x === "string") : [];
     const tipo = apiToDbCat(b.categoria);
+    const genero = apiToDbGenero(b.genero);
     const description = typeof b.descripcion === "string" ? b.descripcion.trim() : "";
 
-    if (!name || !brand)
-      return NextResponse.json({ error: "nombre y marca son obligatorios" }, { status: 400 });
-    if (!Number.isFinite(ml) || !Number.isFinite(price)) {
-      return NextResponse.json({ error: "ml y precio deben ser numéricos" }, { status: 400 });
+    if (!name || !brand) return NextResponse.json({ error: "nombre y marca son obligatorios" }, { status: 400 });
+    if (!Number.isFinite(ml) || ml <= 0 || !Number.isFinite(price) || price < 0) {
+      return NextResponse.json({ error: "ml y precio inválidos" }, { status: 400 });
     }
 
     const created = await prisma.perfume.create({
@@ -120,7 +135,8 @@ export async function POST(req: Request) {
         ml,
         price,
         images: images as unknown as Prisma.InputJsonValue,
-        tipo,            // ← antes category
+        tipo,
+        genero, // guarda género
         description,
       },
     });
@@ -148,15 +164,15 @@ export async function PATCH(req: Request) {
 
   const patch = (await req.json()) as Partial<PerfumeInput>;
   const data: Prisma.PerfumeUpdateInput = {};
+
   if (patch.nombre !== undefined) data.name = String(patch.nombre);
   if (patch.marca !== undefined) data.brand = String(patch.marca);
   if (patch.ml !== undefined) data.ml = Number(patch.ml);
   if (patch.precio !== undefined) data.price = Number(patch.precio);
-  if (patch.categoria !== undefined) data.tipo = apiToDbCat(patch.categoria); // ← antes category
+  if (patch.categoria !== undefined) data.tipo = apiToDbCat(patch.categoria);
+  if (patch.genero !== undefined) data.genero = apiToDbGenero(patch.genero);
   if (patch.imagenes !== undefined) {
-    const imgs = Array.isArray(patch.imagenes)
-      ? patch.imagenes.filter((x): x is string => typeof x === "string")
-      : [];
+    const imgs = Array.isArray(patch.imagenes) ? patch.imagenes.filter((x): x is string => typeof x === "string") : [];
     data.images = imgs as unknown as Prisma.InputJsonValue;
   }
   if (patch.descripcion !== undefined) data.description = String(patch.descripcion);
