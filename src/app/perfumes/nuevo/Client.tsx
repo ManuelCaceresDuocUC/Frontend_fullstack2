@@ -17,7 +17,7 @@ const isCategoria = (x: unknown): x is Categoria =>
   CATS.includes(String(x) as Categoria);
 
 // Género
-const GENEROS = ["MASCULINO", "FEMENINO", "UNISEX"] as const;
+const GENEROS = ["HOMBRE", "MUJER", "UNISEX"] as const;
 type Genero = (typeof GENEROS)[number];
 const isGenero = (x: unknown): x is Genero =>
   GENEROS.includes(String(x) as Genero);
