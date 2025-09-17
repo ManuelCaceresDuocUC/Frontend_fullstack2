@@ -41,7 +41,11 @@ const norm = (s: unknown) =>
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .toUpperCase();
-
+const cleanDesc = (v: unknown): string | null => {
+  if (typeof v !== "string") return null;
+  const t = v.replace(/\u0000/g, "").trim();
+  return t ? t.slice(0, 10000) : null; // límite prudente
+};
 const apiToDbCat = (c: unknown): Perfume_category => {
   const u = norm(c);
   if (u === "NICHO") return "NICHO";
@@ -121,7 +125,7 @@ export async function POST(req: Request) {
     const images = Array.isArray(b.imagenes) ? b.imagenes.filter((x): x is string => typeof x === "string") : [];
     const tipo = apiToDbCat(b.categoria);
     const genero = apiToDbGenero(b.genero);
-    const description = typeof b.descripcion === "string" ? b.descripcion.trim() : "";
+const description = cleanDesc(b.descripcion);
 
     if (!name || !brand) return NextResponse.json({ error: "nombre y marca son obligatorios" }, { status: 400 });
     if (!Number.isFinite(ml) || ml <= 0 || !Number.isFinite(price) || price < 0) {
@@ -175,7 +179,7 @@ export async function PATCH(req: Request) {
     const imgs = Array.isArray(patch.imagenes) ? patch.imagenes.filter((x): x is string => typeof x === "string") : [];
     data.images = imgs as unknown as Prisma.InputJsonValue;
   }
-  if (patch.descripcion !== undefined) data.description = String(patch.descripcion);
+if (patch.descripcion !== undefined) data.description = cleanDesc(patch.descripcion);
 
   const updated = await prisma.perfume.update({
     where: { id },

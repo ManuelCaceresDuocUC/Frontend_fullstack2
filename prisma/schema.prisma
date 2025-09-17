@@ -56,7 +56,7 @@ model Perfume {
   tipo        Perfume_category
   isDecant    Boolean          @default(false)
   genero      Genero           @default(UNISEX)
-  description String?          @default("")
+  description String? @db.Text   // ← quita @default(""), usa TEXT
   images      Json?           
   createdBy   String?
   createdAt   DateTime         @default(now())
