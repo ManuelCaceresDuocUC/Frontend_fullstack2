@@ -28,7 +28,9 @@ export default function PerfilPage() {
             <li>Puedes explorar la <a href="/galeria" className="underline">galería</a> y agregar perfumes al carrito.</li>
           </ul>
         </section>
+  
 
+  
         {u.role === "ADMIN" && (
           <div className="mt-8">
             <a href="/perfumes/nuevo" className="inline-block bg-amber-300 text-black px-5 py-2.5 rounded-2xl font-semibold hover:bg-yellow-300">
