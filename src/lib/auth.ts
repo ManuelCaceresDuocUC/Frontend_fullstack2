@@ -1,18 +1,32 @@
-import type { NextAuthOptions, Session } from "next-auth";
-import Google from "next-auth/providers/google";
-import type { JWT } from "next-auth/jwt";
+import type { NextAuthOptions } from "next-auth";
+import GoogleProvider from "next-auth/providers/google";
+import { prisma } from "@/lib/prisma";
+
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").split(",");
 
 export const authOptions: NextAuthOptions = {
-  providers: [Google({
-    clientId: process.env.GOOGLE_ID!,
-    clientSecret: process.env.GOOGLE_SECRET!,
-  })],
+  providers: [
+    GoogleProvider({ clientId: process.env.GOOGLE_ID!, clientSecret: process.env.GOOGLE_SECRET! }),
+  ],
   session: { strategy: "jwt" },
   callbacks: {
-    async jwt({ token, account, user }): Promise<JWT> {
-      if (account?.access_token) token.accessToken = account.access_token;
-      if (user?.id) token.uid = user.id;
-      token.role ??= "USER";
+    async signIn({ user }) {
+      if (!user.email) return false;
+      const role: "ADMIN" | "USER" = ADMIN_EMAILS.includes(user.email) ? "ADMIN" : "USER";
+      await prisma.user.upsert({
+        where: { email: user.email },
+        create: { email: user.email, name: user.name ?? "", image: user.image ?? "", role },
+        update: { role },
+      });
+      return true;
+    },
+    async jwt({ token, account }) {
+      if (account?.access_token) token.accessToken = account.access_token as string;
+      if (token.email) {
+        const db = await prisma.user.findUnique({ where: { email: token.email }, select: { id: true, role: true } });
+        token.uid = db?.id ?? token.sub ?? "";
+        token.role = (db?.role ?? (ADMIN_EMAILS.includes(token.email) ? "ADMIN" : "USER")) as "ADMIN" | "USER";
+      }
       return token;
     },
     async session({ session, token }) {
@@ -21,7 +35,7 @@ export const authOptions: NextAuthOptions = {
         session.user.role = (token.role as "ADMIN" | "USER") ?? "USER";
       }
       if (token.accessToken) session.accessToken = token.accessToken;
-      return session as Session;
+      return session;
     },
   },
 };
