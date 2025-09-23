@@ -15,7 +15,7 @@ export default function Home() {
       {/* HERO */}
 <section className="relative px-4 aspect-[16/9]">
   <Image
-    src="/MAfums-(2).jpg"
+    src="/KuyVal.png"
     alt="Hero"
     fill
     priority

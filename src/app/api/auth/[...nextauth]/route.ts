@@ -1,36 +1,46 @@
-// src/app/api/auth/[...nextauth]/route.ts
-export const runtime = "nodejs";
-
-import NextAuth from "next-auth";
-import type { NextAuthOptions } from "next-auth";
+// app/api/auth/[...nextauth]/route.ts
+import NextAuth, { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
-import type { JWT } from "next-auth/jwt";
+import { prisma } from "@/lib/prisma";
+import { JWT } from "next-auth/jwt";
 
-const authOptions: NextAuthOptions = {
-  providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_ID!,
-      clientSecret: process.env.GOOGLE_SECRET!,
-    }),
-  ],
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "").split(",");
+
+declare module "next-auth" {
+  interface User { role: "ADMIN" | "USER" }
+  interface Session { user: { name?: string|null; email?: string|null; image?: string|null; role: "ADMIN"|"USER" } }
+}
+declare module "next-auth/jwt" {
+  interface JWT { role?: "ADMIN" | "USER" }
+}
+
+export const authOptions: NextAuthOptions = {
+  providers: [GoogleProvider({ clientId: process.env.GOOGLE_ID!, clientSecret: process.env.GOOGLE_SECRET! })],
   session: { strategy: "jwt" },
   callbacks: {
-    async jwt({ token, account, user }): Promise<JWT> {
-      if (account?.access_token) token.accessToken = account.access_token;
-      if (user?.id) token.uid = user.id;
-      token.role ??= "USER";
-      return token;
+    async signIn({ user }) {
+      if (!user.email) return false;
+      const role: "ADMIN" | "USER" = ADMIN_EMAILS.includes(user.email) ? "ADMIN" : "USER";
+      await prisma.user.upsert({
+        where: { email: user.email },
+        create: { email: user.email, name: user.name ?? "", image: user.image ?? "", role },
+        update: { role },
+      });
+      return true;
+    },
+    async jwt({ token, user }) {
+      // Primer login: viene user. Luego leemos desde BD si falta.
+      if (user?.email) {
+        const found = await prisma.user.findUnique({ where: { email: user.email }, select: { role: true } });
+        token.role = found?.role ?? (ADMIN_EMAILS.includes(user.email) ? "ADMIN" : "USER");
+      }
+      return token as JWT;
     },
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.uid ?? "";
-        session.user.role = (token.role as "ADMIN" | "USER") ?? "USER";
-      }
-      if (token.accessToken) session.accessToken = token.accessToken;
+      if (session.user) session.user.role = (token.role ?? "USER");
       return session;
     },
   },
 };
-
 const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
