@@ -26,6 +26,8 @@ export async function GET() {
         shippingNotes: true,
         items: {
           select: {
+
+            
             id: true,
             perfumeId: true,
             name: true,
