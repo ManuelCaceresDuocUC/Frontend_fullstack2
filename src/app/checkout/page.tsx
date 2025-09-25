@@ -6,20 +6,23 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/store/useCart";
+import { REGIONES, COMUNAS } from "@/data/chile";
 
 type PaymentMethod = "MERCADOPAGO" | "WEBPAY" | "VENTIPAY";
+type Region = (typeof REGIONES)[number];
 
 const fmt = (n: number) =>
   n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
 const STORAGE_KEY = "checkout:v1";
+
 type SavedForm = {
   email: string;
   buyerName: string;
   phone: string;
   shippingStreet: string;
   shippingCity: string;
-  shippingRegion: string;
+  shippingRegion: Region | "";
   shippingZip: string;
   shippingNotes: string;
   paymentMethod: PaymentMethod | null;
@@ -30,7 +33,7 @@ export default function CheckoutPage() {
   const items = useCart((s) => s.items);
   const clear = useCart((s) => s.clear);
 
-  // hidratar
+  // hidratación y redirección si carrito vacío
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => { setHydrated(true); }, []);
   useEffect(() => {
@@ -38,9 +41,7 @@ export default function CheckoutPage() {
   }, [hydrated, items.length, router]);
 
   // --------- Totales ----------
-  const [shippingFee] = useState(0);
   const subtotal = items.reduce((sum, it) => sum + it.price * it.qty, 0);
-  const total = subtotal + shippingFee;
 
   // --------- Form state ----------
   const [email, setEmail] = useState("");
@@ -48,14 +49,18 @@ export default function CheckoutPage() {
   const [phone, setPhone] = useState("");
 
   const [shippingStreet, setStreet] = useState("");
-  const [shippingCity, setCity] = useState("");
-  const [shippingRegion, setRegion] = useState("");
+  const [shippingRegion, setRegion] = useState<Region>("Valparaíso");
+  const [shippingCity, setCity] = useState<string>("");
   const [shippingZip, setZip] = useState("");
   const [shippingNotes, setNotes] = useState("");
+
+  const [shippingFee, setShippingFee] = useState<number>(0);
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [agree, setAgree] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const total = subtotal + (shippingFee || 0);
 
   // --------- Cargar guardado una sola vez ----------
   const loadedRef = useRef(false);
@@ -71,14 +76,16 @@ export default function CheckoutPage() {
       if (s.phone) setPhone(s.phone ?? "");
       if (s.shippingStreet) setStreet(s.shippingStreet);
       if (s.shippingCity) setCity(s.shippingCity);
-      if (s.shippingRegion) setRegion(s.shippingRegion);
+      if (s.shippingRegion) setRegion((s.shippingRegion as Region) ?? "Valparaíso");
       if (s.shippingZip) setZip(s.shippingZip ?? "");
       if (s.shippingNotes) setNotes(s.shippingNotes ?? "");
       if (s.paymentMethod) setPaymentMethod(s.paymentMethod);
-    } catch {}
+    } catch {
+      // ignora
+    }
   }, [hydrated]);
 
-  // --------- Guardar en localStorage (debounce ligero) ----------
+  // --------- Guardar en localStorage ----------
   useEffect(() => {
     if (!hydrated) return;
     const toSave: SavedForm = {
@@ -96,6 +103,28 @@ export default function CheckoutPage() {
     shippingStreet, shippingCity, shippingRegion, shippingZip, shippingNotes,
     paymentMethod,
   ]);
+
+  // --------- Cotizar envío ----------
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        if (!shippingRegion) { setShippingFee(0); return; }
+        const res = await fetch("/api/shipping/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ region: shippingRegion, comuna: shippingCity, subtotal }),
+        });
+        const j: { cost?: number; error?: string } = await res.json();
+        if (!alive) return;
+        setShippingFee(res.ok ? Number(j.cost || 0) : 0);
+      } catch {
+        if (!alive) return;
+        setShippingFee(0);
+      }
+    })();
+    return () => { alive = false; };
+  }, [shippingRegion, shippingCity, subtotal]);
 
   const disabled =
     loading ||
@@ -164,7 +193,7 @@ export default function CheckoutPage() {
               <div className="space-y-2">
                 {([
                   { id: "MERCADOPAGO", label: "Mercado Pago | Débito y Crédito" },
-                  { id: "WEBPAY", label: "WebPay | Crédito" },
+                  { id: "WEBPAY", label: "Webpay | Débito y Crédito" },
                   { id: "VENTIPAY", label: "VentiPay | Débito y Crédito" },
                 ] as const).map((opt) => (
                   <label
@@ -242,26 +271,36 @@ export default function CheckoutPage() {
                     placeholder="Av. Siempre Viva 742"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm mb-1">Ciudad</label>
-                  <input
+                  <label className="block text-sm mb-1">Región</label>
+                  <select
+                    required
+                    value={shippingRegion}
+                    onChange={(e) => { setRegion(e.target.value as Region); setCity(""); }}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                  >
+                    {REGIONES.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm mb-1">Comuna</label>
+                  <select
                     required
                     value={shippingCity}
                     onChange={(e) => setCity(e.target.value)}
                     className="w-full rounded-xl border border-slate-300 px-3 py-2"
-                    placeholder="Santiago"
-                  />
+                  >
+                    <option value="" disabled>Selecciona</option>
+                    {(COMUNAS[shippingRegion] ?? []).map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
                 </div>
-                <div>
-                  <label className="block text-sm mb-1">Región</label>
-                  <input
-                    required
-                    value={shippingRegion}
-                    onChange={(e) => setRegion(e.target.value)}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2"
-                    placeholder="Metropolitana"
-                  />
-                </div>
+
                 <div>
                   <label className="block text-sm mb-1">Código postal (opcional)</label>
                   <input
