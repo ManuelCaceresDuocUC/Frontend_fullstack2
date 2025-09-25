@@ -5,8 +5,21 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, context: { params: { id: string } }) {
-  const { id } = context.params;
+type Ctx = { params: { id: string } };
+function isCtx(x: unknown): x is Ctx {
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    "params" in x &&
+    typeof (x as { params?: unknown }).params === "object" &&
+    (x as { params: { id?: unknown } }).params !== null &&
+    typeof (x as { params: { id?: unknown } }).params.id === "string"
+  );
+}
+
+export async function GET(_req: Request, ctx: unknown) {
+  if (!isCtx(ctx)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+  const { id } = ctx.params;
 
   const o = await prisma.order.findUnique({
     where: { id },
@@ -18,7 +31,6 @@ export async function GET(_req: Request, context: { params: { id: string } }) {
       shipment: true,
     },
   });
-
   if (!o) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
 
   const provider = o.shipment?.carrier ?? null;
@@ -29,7 +41,7 @@ export async function GET(_req: Request, context: { params: { id: string } }) {
     total: o.total,
     subtotal: o.subtotal,
     shippingFee: o.shippingFee,
-    status: o.status, // "PENDING" | "PAID" | ...
+    status: o.status,
     email: o.email,
     buyerName: o.buyerName,
     address: {
@@ -43,11 +55,7 @@ export async function GET(_req: Request, context: { params: { id: string } }) {
       provider: provider as "Bluexpress" | "Despacho propio" | "Pendiente" | null,
       tracking,
     },
-    invoice: {
-      sent: false,
-      url: null,
-      number: null,
-    },
+    invoice: { sent: false, url: null, number: null },
     paymentMethod: o.payment?.method ?? null,
     items: o.items.map((it) => ({
       id: it.id,
