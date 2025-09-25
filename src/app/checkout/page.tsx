@@ -10,6 +10,11 @@ import { REGIONES, COMUNAS } from "@/data/chile";
 
 type PaymentMethod = "MERCADOPAGO" | "WEBPAY" | "VENTIPAY";
 type Region = (typeof REGIONES)[number];
+type ShippingProvider = "Bluexpress" | "Despacho propio" | "";
+
+type QuoteResp =
+  | { cost: number; provider: ShippingProvider; reason: string }
+  | { error: string };
 
 const fmt = (n: number) =>
   n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
@@ -54,8 +59,10 @@ export default function CheckoutPage() {
   const [shippingZip, setZip] = useState("");
   const [shippingNotes, setNotes] = useState("");
 
-const [shippingFee, setShippingFee] = useState<number>(0);
-const [shippingQuoted, setShippingQuoted] = useState<boolean>(false);
+  const [shippingFee, setShippingFee] = useState<number>(0);
+  const [shippingQuoted, setShippingQuoted] = useState<boolean>(false);
+  const [shippingProvider, setShippingProvider] = useState<ShippingProvider>("");
+  const [shippingReason, setShippingReason] = useState<string>("");
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [agree, setAgree] = useState(false);
@@ -81,9 +88,7 @@ const [shippingQuoted, setShippingQuoted] = useState<boolean>(false);
       if (s.shippingZip) setZip(s.shippingZip ?? "");
       if (s.shippingNotes) setNotes(s.shippingNotes ?? "");
       if (s.paymentMethod) setPaymentMethod(s.paymentMethod);
-    } catch {
-      // ignora
-    }
+    } catch {}
   }, [hydrated]);
 
   // --------- Guardar en localStorage ----------
@@ -107,40 +112,58 @@ const [shippingQuoted, setShippingQuoted] = useState<boolean>(false);
 
   // --------- Cotizar envío ----------
   useEffect(() => {
-  let alive = true;
-  (async () => {
-    try {
-      if (!shippingRegion || subtotal <= 0) { 
-        if (alive) { setShippingFee(0); setShippingQuoted(false); }
-        return; 
-      }
-      const res = await fetch("/api/shipping/quote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ region: shippingRegion, comuna: shippingCity, subtotal }),
-      });
-      const j: { cost?: number; error?: string } = await res.json();
-      if (!alive) return;
-      if (res.ok) {
-        setShippingFee(Number(j.cost || 0));
-        setShippingQuoted(true);
-      } else {
+    let alive = true;
+    (async () => {
+      try {
+        if (!shippingRegion || subtotal <= 0) {
+          if (alive) {
+            setShippingFee(0);
+            setShippingQuoted(false);
+            setShippingProvider("");
+            setShippingReason("");
+          }
+          return;
+        }
+        const res = await fetch("/api/shipping/quote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ region: shippingRegion, comuna: shippingCity, subtotal }),
+        });
+        const j: QuoteResp = await res.json();
+        if (!alive) return;
+        if (res.ok && "cost" in j) {
+          setShippingFee(Number(j.cost || 0));
+          setShippingProvider(j.provider);
+          setShippingReason(j.reason);
+          setShippingQuoted(true);
+        } else {
+          setShippingFee(0);
+          setShippingProvider("");
+          setShippingReason("");
+          setShippingQuoted(false);
+        }
+      } catch {
+        if (!alive) return;
         setShippingFee(0);
+        setShippingProvider("");
+        setShippingReason("");
         setShippingQuoted(false);
       }
-    } catch {
-      if (!alive) return;
-      setShippingFee(0);
-      setShippingQuoted(false);
-    }
-  })();
-  return () => { alive = false; };
-}, [shippingRegion, shippingCity, subtotal]);
+    })();
+    return () => { alive = false; };
+  }, [shippingRegion, shippingCity, subtotal]);
 
-
-  const disabled = loading || items.length === 0 || !agree || !email || !buyerName ||
-  !shippingStreet || !shippingCity || !shippingRegion || !paymentMethod || !shippingQuoted;
-
+  const disabled =
+    loading ||
+    items.length === 0 ||
+    !agree ||
+    !email ||
+    !buyerName ||
+    !shippingStreet ||
+    !shippingCity ||
+    !shippingRegion ||
+    !paymentMethod ||
+    !shippingQuoted;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -197,9 +220,7 @@ const [shippingQuoted, setShippingQuoted] = useState<boolean>(false);
               <h2 className="font-semibold text-lg mb-4">Pago</h2>
               <div className="space-y-2">
                 {([
-                  { id: "MERCADOPAGO", label: "Mercado Pago | Débito y Crédito" },
                   { id: "WEBPAY", label: "Webpay | Débito y Crédito" },
-                  { id: "VENTIPAY", label: "VentiPay | Débito y Crédito" },
                 ] as const).map((opt) => (
                   <label
                     key={opt.id}
@@ -327,10 +348,7 @@ const [shippingQuoted, setShippingQuoted] = useState<boolean>(false);
                 </div>
               </div>
             </section>
-                    <div className="flex justify-between">
-  <span>Envío</span>
-  <span>{shippingQuoted ? fmt(shippingFee) : "Calculando..."}</span>
-</div>
+
             {/* Términos + pagar */}
             <section className="rounded-2xl border border-slate-200 p-4 md:p-6 space-y-4">
               <label className="flex items-center gap-2 text-sm">
@@ -390,10 +408,25 @@ const [shippingQuoted, setShippingQuoted] = useState<boolean>(false);
                 <span>Subtotal</span>
                 <span>{fmt(subtotal)}</span>
               </div>
-              <div className="flex justify-between">
-                <span>Envío</span>
-                <span>{shippingFee ? fmt(shippingFee) : "Por calcular / $0"}</span>
+
+              <div className="flex justify-between items-start">
+                <span className="flex items-center gap-2">
+                  {shippingProvider === "Bluexpress" && (
+                    <Image src="/logos/Blue-Express_idXtd1VpDG_1.svg" alt="Bluexpress" width={50} height={18} />
+                  )}
+                  {shippingProvider === "Despacho propio" && (
+                    <Image src="/icons/reshot-icon-scooter-delivery-UC2X3QSBP4.svg" alt="Despacho" width={20} height={20} />
+                  )}
+                  <span className="text-sm">
+                    {shippingQuoted ? (shippingProvider || "Envío") : "Calculando..."}
+                  </span>
+                </span>
+                <span>{shippingQuoted ? fmt(shippingFee) : "Calculando..."}</span>
               </div>
+              {shippingQuoted && shippingReason && (
+                <p className="text-xs text-slate-500">{shippingReason}</p>
+              )}
+
               <div className="border-t my-2" />
               <div className="flex justify-between text-base font-extrabold">
                 <span>Total</span>

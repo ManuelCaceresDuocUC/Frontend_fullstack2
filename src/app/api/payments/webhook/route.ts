@@ -2,6 +2,7 @@
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { PaymentStatus, OrderStatus } from "@prisma/client";
 
@@ -25,26 +26,33 @@ function normalizeProviderPayload(payload: unknown): Normalized {
   if (typeof payload === "object" && payload !== null) {
     const p = payload as ProviderPayload;
 
-    // orderId
     if (typeof p.orderId === "string") orderId = p.orderId;
     else if (p.orderId != null) orderId = String(p.orderId);
 
-    // providerRef candidates
-    const ref =
+    providerRef =
       (typeof p.tx === "string" && p.tx) ||
       (typeof p.token === "string" && p.token) ||
       (typeof p.providerRef === "string" && p.providerRef) ||
       (typeof p.providerTxId === "string" && p.providerTxId) ||
       null;
-    providerRef = ref;
 
-    // status
     const s = typeof p.status === "string" ? p.status.toUpperCase() : "";
     status = s === "PAID" || s === "AUTHORIZED" || s === "INITIATED" ? (s as PaymentState) : "FAILED";
   }
 
   if (!orderId) throw new Error("orderId missing");
   return { orderId, providerRef, status };
+}
+
+async function inferBaseUrl() {
+  const hdrs = await headers();
+  const proto = hdrs.get("x-forwarded-proto") || "https";
+  const host = hdrs.get("x-forwarded-host") || hdrs.get("host") || "";
+  return process.env.APP_BASE_URL || (host ? `${proto}://${host}` : "");
+}
+
+function makeTracking(prefix: string, id: string) {
+  return `${prefix}-${id.slice(0, 8).toUpperCase()}`;
 }
 
 export async function POST(req: Request) {
@@ -54,7 +62,7 @@ export async function POST(req: Request) {
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { payment: true, items: true },
+      include: { payment: true, items: true, shipment: true },
     });
     if (!order) return NextResponse.json({ ok: true });
 
@@ -69,38 +77,52 @@ export async function POST(req: Request) {
     });
 
     if (isPaid) {
+      // Determina carrier/tracking usando Shipment o región
+      const carrierExisting = order.shipment?.carrier ?? null;
+      const carrier =
+        carrierExisting ?? (order.shippingRegion === "Valparaíso" ? "Despacho propio" : "Bluexpress");
+
+      const trackingExisting = order.shipment?.tracking ?? null;
+      const tracking =
+        trackingExisting ?? (carrier === "Bluexpress" ? makeTracking("BX", orderId) : makeTracking("DP", orderId));
+
+      // Actualiza estado de la orden
       await prisma.order.update({
         where: { id: orderId },
         data: { status: OrderStatus.PAID },
       });
+
+      // Crea/actualiza Shipment (no escribe columnas inexistentes en Order)
       await prisma.shipment.upsert({
         where: { orderId },
-        update: {},
-        create: {
-          orderId,
-          carrier: "Pendiente",
-          tracking: makeTracking(orderId),
-        },
+        update: { carrier, tracking },
+        create: { orderId, carrier, tracking },
       });
+
+      // Dispara envío de boleta (ignora errores)
+      const base = await inferBaseUrl();
+      if (base) {
+        try { await fetch(`${base}/api/orders/${orderId}/send-invoice`, { method: "POST" }); } catch {}
+      }
     } else {
+      // Restituye stock con updateMany
       await Promise.all(
         order.items.map((line) =>
-          prisma.stock
-            .update({
-              where: { perfumeId: line.perfumeId },
-              data: { qty: { increment: line.qty } },
-            })
-            .catch(() => null)
+          prisma.stock.updateMany({
+            where: { perfumeId: line.perfumeId },
+            data: { qty: { increment: line.qty } },
+          })
         )
       );
+
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { status: OrderStatus.CANCELLED },
+      });
     }
 
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
-}
-
-function makeTracking(id: string) {
-  return "MF-" + id.slice(0, 6).toUpperCase();
 }
