@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createMPPreference, type MPItem } from "@/lib/payments/mercadopago";
 import { createWebpayTx } from "@/lib/payments/webpay";
 import { createVentiSession } from "@/lib/payments/venti";
+import { quoteShipping } from "@/lib/shipping";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,6 +35,12 @@ export async function POST(req: Request) {
     if (!Array.isArray(items) || items.length === 0) return fmtErr("items vacíos");
     if (!paymentMethod) return fmtErr("paymentMethod requerido");
 
+    // Dirección mínima para calcular envío
+    const street = String(address?.street ?? "").trim();
+    const region = String(address?.region ?? "").trim();
+    const comuna = String(address?.city ?? "").trim();
+    if (!street || !region || !comuna) return fmtErr("Dirección incompleta");
+
     // Catálogo
     const ids = items.map((it) => it.id);
     const perfumes: PerfumeRow[] = await prisma.perfume.findMany({
@@ -55,14 +62,18 @@ export async function POST(req: Request) {
     });
 
     const subtotal = itemsData.reduce((sum, it) => sum + it.unitPrice * it.qty, 0);
-    const shippingFee = 0;
+
+    // Envío
+    const q = quoteShipping({ region, comuna, subtotal });
+    if ("error" in q) return fmtErr(q.error);
+    const shippingFee = q.cost;
     const total = subtotal + shippingFee;
 
-    // Método de pago para DB (tu enum actual es: WEBPAY | SERVIPAG | MANUAL)
+    // Método de pago para DB (enum actual: WEBPAY | SERVIPAG | MANUAL)
     const methodForDb: "WEBPAY" | "SERVIPAG" | "MANUAL" =
       paymentMethod === "WEBPAY" ? "WEBPAY" : "MANUAL";
 
-    // Cantidad requerida por perfume
+    // Necesidad por perfume
     const needById = items.reduce<Record<string, number>>((acc, it) => {
       acc[it.id] = (acc[it.id] ?? 0) + it.qty;
       return acc;
@@ -70,7 +81,6 @@ export async function POST(req: Request) {
 
     // Transacción: descuenta stock y crea orden
     const created = await prisma.$transaction(async (tx) => {
-      // Descuento de stock seguro
       const updates = await Promise.all(
         Object.entries(needById).map(([perfumeId, need]) =>
           tx.stock.updateMany({
@@ -82,15 +92,14 @@ export async function POST(req: Request) {
       const failed = updates.find((u) => u.count === 0);
       if (failed) throw new Error("Sin stock suficiente para uno o más productos.");
 
-      // Crear orden
       const order = await tx.order.create({
         data: {
           email,
           buyerName,
           phone: phone ?? "",
-          shippingStreet: address?.street ?? "",
-          shippingCity: address?.city ?? "",
-          shippingRegion: address?.region ?? "",
+          shippingStreet: street,
+          shippingCity: comuna,
+          shippingRegion: region,
           shippingZip: address?.zip ?? "",
           shippingNotes: address?.notes ?? "",
           subtotal,
@@ -112,45 +121,53 @@ export async function POST(req: Request) {
       return order;
     });
 
-    // Crear transacción con proveedor y URL de redirección
+    // Env obligatoria
+    const APP_BASE_URL = process.env.APP_BASE_URL;
+    if (!APP_BASE_URL) return fmtErr("APP_BASE_URL no configurada", 500);
+
+    // Crear transacción con proveedor
     let redirectUrl: string | undefined;
-   switch (paymentMethod) {
-case "MERCADOPAGO": {
-  const mpItems: MPItem[] = itemsData.map(i => ({
-    title: `${i.brand} ${i.name}`,
-    quantity: i.qty,
-    unit_price: i.unitPrice,
-    currency_id: "CLP",
-  }));
-  const pref = await createMPPreference({
-  orderId: created.id,
-  items: mpItems,
-  returnUrl: `${process.env.APP_BASE_URL}/pago/mercadopago/retorno`,
-  webhookUrl: `${process.env.APP_BASE_URL}/api/webhooks/mercadopago`,
-});
-  redirectUrl = pref.init_point;
-  break;
-}
-  case "WEBPAY": {
-    const { token, url } = await createWebpayTx({
-      orderId: created.id, total,
-      returnUrl: `${process.env.APP_BASE_URL}/pago/webpay/retorno`,
-    });
-    redirectUrl = `${url}?token_ws=${token}`;
-    break;
-  }
-  case "VENTIPAY": {
-    const { url } = await createVentiSession({
-      orderId: created.id, total,
-      returnUrl: `${process.env.APP_BASE_URL}/pago/venti/retorno`,
-      webhookUrl: `${process.env.APP_BASE_URL}/api/webhooks/venti`,
-    });
-    redirectUrl = url;
-    break;
-  }
-  case "MANUAL":
-    break;
-}
+
+    switch (paymentMethod) {
+      case "MERCADOPAGO": {
+        const mpItems: MPItem[] = itemsData.map((i) => ({
+          title: `${i.brand} ${i.name}`,
+          quantity: i.qty,
+          unit_price: i.unitPrice,
+          currency_id: "CLP",
+        }));
+        const pref = await createMPPreference({
+          orderId: created.id,
+          items: mpItems,
+          returnUrl: `${APP_BASE_URL}/pago/mercadopago/retorno`,
+          webhookUrl: `${APP_BASE_URL}/api/webhooks/mercadopago`,
+        });
+        redirectUrl = pref.init_point;
+        break;
+      }
+      case "WEBPAY": {
+        const { token, url } = await createWebpayTx({
+          orderId: created.id,
+          total,
+          returnUrl: `${APP_BASE_URL}/pago/webpay/retorno`,
+        });
+        redirectUrl = `${url}?token_ws=${token}`;
+        break;
+      }
+      case "VENTIPAY": {
+        const { url } = await createVentiSession({
+          orderId: created.id,
+          total,
+          returnUrl: `${APP_BASE_URL}/pago/venti/retorno`,
+          webhookUrl: `${APP_BASE_URL}/api/webhooks/venti`,
+        });
+        redirectUrl = url;
+        break;
+      }
+      case "MANUAL":
+        // Sin redirección
+        break;
+    }
 
     return NextResponse.json({ id: created.id, redirectUrl });
   } catch (err) {
