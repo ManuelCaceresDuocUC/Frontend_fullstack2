@@ -54,7 +54,8 @@ export default function CheckoutPage() {
   const [shippingZip, setZip] = useState("");
   const [shippingNotes, setNotes] = useState("");
 
-  const [shippingFee, setShippingFee] = useState<number>(0);
+const [shippingFee, setShippingFee] = useState<number>(0);
+const [shippingQuoted, setShippingQuoted] = useState<boolean>(false);
 
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [agree, setAgree] = useState(false);
@@ -106,36 +107,40 @@ export default function CheckoutPage() {
 
   // --------- Cotizar envío ----------
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        if (!shippingRegion) { setShippingFee(0); return; }
-        const res = await fetch("/api/shipping/quote", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ region: shippingRegion, comuna: shippingCity, subtotal }),
-        });
-        const j: { cost?: number; error?: string } = await res.json();
-        if (!alive) return;
-        setShippingFee(res.ok ? Number(j.cost || 0) : 0);
-      } catch {
-        if (!alive) return;
-        setShippingFee(0);
+  let alive = true;
+  (async () => {
+    try {
+      if (!shippingRegion || subtotal <= 0) { 
+        if (alive) { setShippingFee(0); setShippingQuoted(false); }
+        return; 
       }
-    })();
-    return () => { alive = false; };
-  }, [shippingRegion, shippingCity, subtotal]);
+      const res = await fetch("/api/shipping/quote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ region: shippingRegion, comuna: shippingCity, subtotal }),
+      });
+      const j: { cost?: number; error?: string } = await res.json();
+      if (!alive) return;
+      if (res.ok) {
+        setShippingFee(Number(j.cost || 0));
+        setShippingQuoted(true);
+      } else {
+        setShippingFee(0);
+        setShippingQuoted(false);
+      }
+    } catch {
+      if (!alive) return;
+      setShippingFee(0);
+      setShippingQuoted(false);
+    }
+  })();
+  return () => { alive = false; };
+}, [shippingRegion, shippingCity, subtotal]);
 
-  const disabled =
-    loading ||
-    items.length === 0 ||
-    !agree ||
-    !email ||
-    !buyerName ||
-    !shippingStreet ||
-    !shippingCity ||
-    !shippingRegion ||
-    !paymentMethod;
+
+  const disabled = loading || items.length === 0 || !agree || !email || !buyerName ||
+  !shippingStreet || !shippingCity || !shippingRegion || !paymentMethod || !shippingQuoted;
+
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -322,7 +327,10 @@ export default function CheckoutPage() {
                 </div>
               </div>
             </section>
-
+                    <div className="flex justify-between">
+  <span>Envío</span>
+  <span>{shippingQuoted ? fmt(shippingFee) : "Calculando..."}</span>
+</div>
             {/* Términos + pagar */}
             <section className="rounded-2xl border border-slate-200 p-4 md:p-6 space-y-4">
               <label className="flex items-center gap-2 text-sm">
