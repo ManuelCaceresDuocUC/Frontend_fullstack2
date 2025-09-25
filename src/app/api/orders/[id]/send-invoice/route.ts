@@ -1,110 +1,84 @@
-// src/app/api/orders/[id]/send-invoice/route.ts
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { buildInvoicePDF } from "@/lib/invoice";
-import nodemailer from "nodemailer";
+// src/lib/invoice.ts
+import PDFDocument from "pdfkit";
+import fs from "node:fs";
+import path from "node:path";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+// npm i -D @types/pdfkit (recomendado)
 
-type Ctx = { params: { id: string } };
-function isCtx(x: unknown): x is Ctx {
-  return (
-    typeof x === "object" &&
-    x !== null &&
-    "params" in x &&
-    typeof (x as { params?: unknown }).params === "object" &&
-    (x as { params: { id?: unknown } }).params !== null &&
-    typeof (x as { params: { id?: unknown } }).params.id === "string"
-  );
+function pdfToBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    doc.on("data", (c) => chunks.push(c as Buffer));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+  });
 }
 
-function makeInvoiceNumber(o: { id: string; createdAt: Date }) {
-  return `B-${String(o.createdAt.getFullYear()).slice(-2)}${o.id.slice(0, 6).toUpperCase()}`;
-}
-function fallbackTracking(orderId: string, carrier: string | null) {
-  const pref = carrier === "Bluexpress" ? "BX" : "DP";
-  return `${pref}-${orderId.slice(0, 8).toUpperCase()}`;
+function getFontBuffer() {
+  // Lee desde /public/fonts en tiempo de ejecución (read-only en Vercel)
+  const p = path.join(process.cwd(), "public", "fonts", "Inter-VariableFont_opsz,wght.ttf");
+  return fs.readFileSync(p);
 }
 
-export async function POST(_req: Request, ctx: unknown) {
-  if (!isCtx(ctx)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
-  const { id } = ctx.params;
+export async function buildInvoicePDF(input: {
+  orderId: string; number: string; buyerName: string; email: string;
+  items: { name: string; brand: string; ml: number | null; unitPrice: number; qty: number }[];
+  subtotal: number; shippingFee: number; total: number;
+  address?: { street: string; city: string; region: string; zip?: string };
+}) {
+  const doc = new PDFDocument({ size: "A4", margin: 36 });
 
-  try {
-    const o = await prisma.order.findUnique({
-      where: { id },
-      include: { items: true, shipment: true },
-    });
-    if (!o) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
-    if (!(o.status === "PAID" || o.status === "FULFILLED")) {
-      return NextResponse.json({ error: "La orden aún no está pagada" }, { status: 400 });
-    }
+  // Registrar y usar TTF propia para evitar Helvetica.afm
+  const fontBuf = getFontBuffer();
+  doc.registerFont("body", fontBuf);
+  doc.font("body");
 
-    const carrier = o.shipment?.carrier ?? (o.shippingRegion === "Valparaíso" ? "Despacho propio" : "Bluexpress");
-    const tracking = o.shipment?.tracking ?? fallbackTracking(o.id, carrier);
+  // Encabezado
+  doc.fontSize(20).text("MAfums", { align: "left" });
+  doc.moveDown(0.5);
+  doc.fontSize(16).text(`Boleta N° ${input.number}`, { align: "right" });
+  doc.moveDown();
 
-    const invoiceNumber = makeInvoiceNumber(o);
-    const pdf = await buildInvoicePDF({
-      orderId: o.id,
-      number: invoiceNumber,
-      buyerName: o.buyerName,
-      email: o.email,
-      items: o.items.map((i) => ({
-        name: i.name,
-        brand: i.brand,
-        ml: i.ml,
-        unitPrice: i.unitPrice,
-        qty: i.qty,
-      })),
-      subtotal: o.subtotal,
-      shippingFee: o.shippingFee,
-      total: o.total,
-      address: {
-        street: o.shippingStreet,
-        city: o.shippingCity,
-        region: o.shippingRegion,
-        zip: o.shippingZip ?? undefined,
-      },
-    });
-
-    // SMTP Gmail
-    const SMTP_HOST = process.env.SMTP_HOST || "smtp.gmail.com";
-    const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-    const SMTP_SECURE = process.env.SMTP_SECURE === "true";
-    const SMTP_USER = process.env.SMTP_USER;
-    const SMTP_PASS = process.env.SMTP_PASS;
-    const SMTP_FROM = process.env.SMTP_FROM || (SMTP_USER ? `MAfums <${SMTP_USER}>` : "");
-
-    if (!SMTP_USER || !SMTP_PASS) {
-      return NextResponse.json({ error: "SMTP_USER/SMTP_PASS no configurados" }, { status: 500 });
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-    });
-
-    await transporter.sendMail({
-      from: SMTP_FROM || SMTP_USER,
-      to: o.email,
-      subject: `Boleta N° ${invoiceNumber} - Orden ${o.id}`,
-      html: `<p>Gracias por tu compra.</p>
-             <p>Número de envío: <strong>${tracking}</strong> (${carrier})</p>
-             <p>Adjuntamos tu boleta en PDF.</p>`,
-      attachments: [{ filename: `Boleta_${invoiceNumber}.pdf`, content: pdf, contentType: "application/pdf" }],
-    });
-
-    await prisma.shipment.upsert({
-      where: { orderId: o.id },
-      update: { carrier, tracking },
-      create: { orderId: o.id, carrier, tracking },
-    });
-
-    return NextResponse.json({ ok: true, invoiceNumber, tracking, carrier });
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+  // Datos de orden
+  doc.fontSize(10);
+  doc.text(`Orden: ${input.orderId}`);
+  doc.text(`Cliente: ${input.buyerName} <${input.email}>`);
+  if (input.address) {
+    const a = input.address;
+    doc.text(`Dirección: ${a.street}, ${a.city}, ${a.region}${a.zip ? " " + a.zip : ""}`);
   }
+
+  // Detalle
+  doc.moveDown();
+  doc.fontSize(12).text("Detalle de compra:");
+  doc.moveDown(0.5);
+
+  input.items.forEach((it) => {
+    const desc = `${it.brand} ${it.name}${it.ml ? ` ${it.ml}ml` : ""} x${it.qty}`;
+    doc.text(desc);
+    doc.text(
+      `   ${it.unitPrice.toLocaleString("es-CL", {
+        style: "currency",
+        currency: "CLP",
+        maximumFractionDigits: 0,
+      })}`
+    );
+  });
+
+  // Totales
+  doc.moveDown();
+  doc.text(
+    `Subtotal: ${input.subtotal.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 })}`
+  );
+  doc.text(
+    `Envío: ${input.shippingFee.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 })}`
+  );
+  doc.moveDown(0.5);
+  doc.fontSize(14).text(
+    `Total: ${input.total.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 })}`,
+    { align: "right" }
+  );
+
+  doc.end();
+  return pdfToBuffer(doc as unknown as PDFKit.PDFDocument);
 }
