@@ -7,6 +7,18 @@ import nodemailer from "nodemailer";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type Ctx = { params: { id: string } };
+function isCtx(x: unknown): x is Ctx {
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    "params" in x &&
+    typeof (x as { params?: unknown }).params === "object" &&
+    (x as { params: { id?: unknown } }).params !== null &&
+    typeof (x as { params: { id?: unknown } }).params.id === "string"
+  );
+}
+
 function makeInvoiceNumber(o: { id: string; createdAt: Date }) {
   return `B-${String(o.createdAt.getFullYear()).slice(-2)}${o.id.slice(0, 6).toUpperCase()}`;
 }
@@ -15,10 +27,13 @@ function fallbackTracking(orderId: string, carrier: string | null) {
   return `${pref}-${orderId.slice(0, 8).toUpperCase()}`;
 }
 
-export async function POST(_: Request, { params }: { params: { id: string } }) {
+export async function POST(_req: Request, ctx: unknown) {
+  if (!isCtx(ctx)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
+  const { id } = ctx.params;
+
   try {
     const o = await prisma.order.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: { items: true, shipment: true },
     });
     if (!o) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
@@ -26,11 +41,9 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
       return NextResponse.json({ error: "La orden aún no está pagada" }, { status: 400 });
     }
 
-    // Envío desde Shipment
     const carrier = o.shipment?.carrier ?? (o.shippingRegion === "Valparaíso" ? "Despacho propio" : "Bluexpress");
     const tracking = o.shipment?.tracking ?? fallbackTracking(o.id, carrier);
 
-    // PDF boleta
     const invoiceNumber = makeInvoiceNumber(o);
     const pdf = await buildInvoicePDF({
       orderId: o.id,
@@ -55,10 +68,10 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
       },
     });
 
-    // SMTP Gmail (envs requeridas)
+    // SMTP Gmail
     const SMTP_HOST = process.env.SMTP_HOST || "smtp.gmail.com";
     const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-    const SMTP_SECURE = process.env.SMTP_SECURE === "true"; // para 587 debe ser false
+    const SMTP_SECURE = process.env.SMTP_SECURE === "true";
     const SMTP_USER = process.env.SMTP_USER;
     const SMTP_PASS = process.env.SMTP_PASS;
     const SMTP_FROM = process.env.SMTP_FROM || (SMTP_USER ? `MAfums <${SMTP_USER}>` : "");
@@ -70,23 +83,20 @@ export async function POST(_: Request, { params }: { params: { id: string } }) {
     const transporter = nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
-      secure: SMTP_SECURE, // true solo si usas 465
+      secure: SMTP_SECURE,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
     });
 
     await transporter.sendMail({
-      from: SMTP_FROM || SMTP_USER, // Gmail suele exigir el mismo USER
+      from: SMTP_FROM || SMTP_USER,
       to: o.email,
       subject: `Boleta N° ${invoiceNumber} - Orden ${o.id}`,
       html: `<p>Gracias por tu compra.</p>
              <p>Número de envío: <strong>${tracking}</strong> (${carrier})</p>
              <p>Adjuntamos tu boleta en PDF.</p>`,
-      attachments: [
-        { filename: `Boleta_${invoiceNumber}.pdf`, content: pdf, contentType: "application/pdf" },
-      ],
+      attachments: [{ filename: `Boleta_${invoiceNumber}.pdf`, content: pdf, contentType: "application/pdf" }],
     });
 
-    // Garantiza Shipment
     await prisma.shipment.upsert({
       where: { orderId: o.id },
       update: { carrier, tracking },
