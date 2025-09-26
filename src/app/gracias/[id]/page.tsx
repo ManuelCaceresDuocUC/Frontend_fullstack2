@@ -136,13 +136,7 @@ export default function GraciasPage() {
 
         {/* Acciones */}
         <section className="flex flex-wrap gap-3">
-          <button
-            onClick={sendInvoice}
-            disabled={sending}
-            className={`px-4 py-2 rounded-xl ${sending ? "bg-slate-400" : "bg-black hover:bg-slate-900"} text-white`}
-          >
-            {order.invoice?.sent ? "Reenviar boleta" : "Enviar boleta"}
-          </button>
+          
           <button
             onClick={() => router.push("/galeria")}
             className="px-4 py-2 rounded-xl bg-blue-600 text-white"
