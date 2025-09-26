@@ -6,10 +6,8 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Ctx = { params: { id: string } };
-
-export async function GET(_req: Request, ctx: Ctx) {
-  const { id } = ctx.params;
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  const { id } = params;
   try {
     const o = await prisma.order.findUnique({
       where: { id },
@@ -18,7 +16,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     if (!o) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
 
     const pdf = await PDFDocument.create();
-    const page = pdf.addPage([288, 432]); // 4x6 in aprox
+    const page = pdf.addPage([288, 432]); // 4x6 in
     const helv = await pdf.embedFont(StandardFonts.Helvetica);
     const helvB = await pdf.embedFont(StandardFonts.HelveticaBold);
 
@@ -38,7 +36,6 @@ export async function GET(_req: Request, ctx: Ctx) {
     draw(`${o.shippingStreet}`, 12);
     draw(`${o.shippingCity}, ${o.shippingRegion}`, 12);
     if (o.shippingZip) draw(`CP: ${o.shippingZip}`, 12);
-
     if (o.shippingNotes) {
       y -= 6;
       draw("Notas:", 12, true, 14);
