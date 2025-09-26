@@ -6,8 +6,11 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, ctx: unknown) {
+  // typado seguro sin `any`
+  const { params } = ctx as { params: { id: string } };
   const { id } = params;
+
   try {
     const o = await prisma.order.findUnique({
       where: { id },
@@ -16,7 +19,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     if (!o) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
 
     const pdf = await PDFDocument.create();
-    const page = pdf.addPage([288, 432]); // 4x6 in
+    const page = pdf.addPage([288, 432]); // 4x6"
     const helv = await pdf.embedFont(StandardFonts.Helvetica);
     const helvB = await pdf.embedFont(StandardFonts.HelveticaBold);
 
