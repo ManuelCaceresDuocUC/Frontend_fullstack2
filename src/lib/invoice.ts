@@ -1,10 +1,8 @@
-// src/lib/invoice.ts
 import PDFDocument from "pdfkit";
 import path from "node:path";
 
-function peso(n: number) {
-  return n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
-}
+const peso = (n: number) =>
+  n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
 export async function buildInvoicePDF(input: {
   orderId: string; number: string; buyerName: string; email: string | null;
@@ -14,10 +12,20 @@ export async function buildInvoicePDF(input: {
 }) {
   const doc = new PDFDocument({ size: "A4", margin: 36 });
 
-  // Registrar y USAR la TTF antes de cualquier text()
-  const fontPath = path.join(process.cwd(), "public", "fonts", "Inter-VariableFont_opsz,wght.ttf");
+  // Usa el archivo variable
+  const fontPath = path.join(
+    process.cwd(),
+    "public",
+    "fonts",
+    "Inter-VariableFont_opsz,wght.ttf"
+  );
+
+  // Regístrala como 'body' y como 'Helvetica' para neutralizar el fallback a AFM
   doc.registerFont("body", fontPath);
-  doc.font("body");
+  doc.registerFont("Helvetica", fontPath);
+
+  // Selecciona ANTES de cualquier text()
+  doc.font("Helvetica");
 
   const chunks: Buffer[] = [];
   doc.on("data", (c) => chunks.push(c as Buffer));
