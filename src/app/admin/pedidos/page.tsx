@@ -11,6 +11,9 @@ type OrderItemView = {
   ml: number | null; unitPrice: number; qty: number;
 };
 
+type ShipmentView = { tracking: string | null; carrier: string | null; delivered: boolean };
+type PaymentView = { method: PaymentMethod; status: PaymentStatus } | null;
+
 type OrderRow = {
   id: string;
   createdAt: string;
@@ -18,8 +21,8 @@ type OrderRow = {
   email: string;
   total: number;
   status: OrderStatus;
-  payment: { method: PaymentMethod; status: PaymentStatus } | null;
-  shipment: { tracking: string | null; carrier: string | null; delivered: boolean } | null;
+  payment: PaymentView;
+  shipment: ShipmentView | null;
   shippingStreet: string; shippingCity: string; shippingRegion: string;
   shippingZip: string; shippingNotes: string;
   items: OrderItemView[];
@@ -58,7 +61,7 @@ export default function AdminOrders() {
     await fetch(`/api/admin/orders/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "PAID" satisfies OrderStatus }),
+      body: JSON.stringify({ status: "PAID" as OrderStatus }),
     });
     load();
   }
@@ -81,10 +84,28 @@ export default function AdminOrders() {
     load();
   }
 
+  async function sendInvoice(id: string, carrier: string, tracking: string) {
+    // 1) guarda carrier+tracking
+    await saveTracking(id, carrier, tracking);
+    // 2) dispara correo con boleta
+    const r = await fetch(`/api/orders/${id}/send-invoice`, { method: "POST" });
+    if (!r.ok) alert(await r.text());
+  }
+
+  async function genLabel(id: string) {
+    const r = await fetch(`/api/orders/${id}/label`, { method: "GET" });
+    if (!r.ok) { alert(await r.text()); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Etiqueta_${id}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <main className="pt-28 px-4 max-w-6xl mx-auto">
-      <div className="h-16 md:h-20" /> {/* spacer igual a la altura del navbar */}
-
+      <div className="h-16 md:h-20" />
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-2xl font-bold">Gestor de pedidos</h1>
         <button onClick={load} className="px-3 py-1.5 rounded-lg border">Actualizar</button>
@@ -114,7 +135,15 @@ export default function AdminOrders() {
             </thead>
             <tbody>
               {filtered.map(o => (
-                <Row key={o.id} o={o} onPaid={setPaid} onDelivered={markDelivered} onSaveTracking={saveTracking} />
+                <Row
+                  key={o.id}
+                  o={o}
+                  onPaid={setPaid}
+                  onDelivered={markDelivered}
+                  onSaveTracking={saveTracking}
+                  onSendInvoice={sendInvoice}
+                  onGenLabel={genLabel}
+                />
               ))}
             </tbody>
           </table>
@@ -129,11 +158,15 @@ function Row(props: {
   onPaid: (id: string) => void;
   onDelivered: (id: string, delivered: boolean) => void;
   onSaveTracking: (id: string, carrier: string, tracking: string) => void;
+  onSendInvoice: (id: string, carrier: string, tracking: string) => void;
+  onGenLabel: (id: string) => void;
 }) {
-  const { o, onPaid, onDelivered, onSaveTracking } = props;
+  const { o, onPaid, onDelivered, onSaveTracking, onSendInvoice, onGenLabel } = props;
   const [open, setOpen] = useState(false);
   const [carrier, setCarrier] = useState(o.shipment?.carrier ?? "");
   const [tracking, setTracking] = useState(o.shipment?.tracking ?? "");
+
+  const canSend = Boolean(carrier && tracking && o.status === "PAID");
 
   return (
     <>
@@ -185,10 +218,20 @@ function Row(props: {
                 <div>
                   <h3 className="font-semibold mb-2">Despacho</h3>
                   <label className="block text-sm">Carrier</label>
-                  <input value={carrier} onChange={e=>setCarrier(e.target.value)} className="w-full px-2 py-1 rounded border" />
+                  <input
+                    value={carrier}
+                    onChange={e=>setCarrier(e.target.value)}
+                    placeholder="Bluexpress / Despacho propio"
+                    className="w-full px-2 py-1 rounded border"
+                  />
                   <label className="block text-sm mt-2">Tracking</label>
-                  <input value={tracking} onChange={e=>setTracking(e.target.value)} className="w-full px-2 py-1 rounded border" />
-                  <div className="mt-2 flex gap-2">
+                  <input
+                    value={tracking}
+                    onChange={e=>setTracking(e.target.value)}
+                    placeholder="BX1234567890"
+                    className="w-full px-2 py-1 rounded border"
+                  />
+                  <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       onClick={()=>onSaveTracking(o.id, carrier, tracking)}
                       className="px-2 py-1 rounded border hover:bg-white"
@@ -200,6 +243,20 @@ function Row(props: {
                       className={`px-2 py-1 rounded border ${o.shipment?.delivered ? "bg-green-100" : "hover:bg-white"}`}
                     >
                       {o.shipment?.delivered ? "Marcar NO entregado" : "Marcar entregado"}
+                    </button>
+                    <button
+                      onClick={()=>onGenLabel(o.id)}
+                      className="px-2 py-1 rounded border hover:bg-white"
+                    >
+                      Generar etiqueta PDF
+                    </button>
+                    <button
+                      onClick={()=>onSendInvoice(o.id, carrier, tracking)}
+                      disabled={!canSend}
+                      className={`px-2 py-1 rounded border ${canSend ? "hover:bg-white" : "opacity-50 cursor-not-allowed"}`}
+                      title={canSend ? "" : "Requiere pago confirmado y tracking"}
+                    >
+                      Enviar boleta por email
                     </button>
                   </div>
                   <div className="text-xs text-slate-500 mt-1">
