@@ -1,10 +1,11 @@
 {
   "compilerOptions": {
+    "types": ["node"],
     "strict": true,
     "baseUrl": "src",
     "paths": { "@/*": ["*"] },
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": ["dom", "dom.iterable", "esnext","ES2022", "DOM"],
     "allowJs": true,
     "skipLibCheck": true,
     "noEmit": true,

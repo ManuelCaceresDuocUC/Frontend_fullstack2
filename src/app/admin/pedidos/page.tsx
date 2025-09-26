@@ -231,34 +231,23 @@ function Row(props: {
                     placeholder="BX1234567890"
                     className="w-full px-2 py-1 rounded border"
                   />
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <button
-                      onClick={()=>onSaveTracking(o.id, carrier, tracking)}
-                      className="px-2 py-1 rounded border hover:bg-white"
-                    >
-                      Guardar tracking
-                    </button>
-                    <button
-                      onClick={()=>onDelivered(o.id, !(o.shipment?.delivered ?? false))}
-                      className={`px-2 py-1 rounded border ${o.shipment?.delivered ? "bg-green-100" : "hover:bg-white"}`}
-                    >
-                      {o.shipment?.delivered ? "Marcar NO entregado" : "Marcar entregado"}
-                    </button>
-                    <button
-                      onClick={()=>onGenLabel(o.id)}
-                      className="px-2 py-1 rounded border hover:bg-white"
-                    >
-                      Generar etiqueta PDF
-                    </button>
-                    <button
-                      onClick={()=>onSendInvoice(o.id, carrier, tracking)}
-                      disabled={!canSend}
-                      className={`px-2 py-1 rounded border ${canSend ? "hover:bg-white" : "opacity-50 cursor-not-allowed"}`}
-                      title={canSend ? "" : "Requiere pago confirmado y tracking"}
-                    >
-                      Enviar boleta por email
-                    </button>
-                  </div>
+                  <div className="mt-2 flex gap-2">
+  <button onClick={()=>onSaveTracking(o.id, carrier, tracking)} className="px-2 py-1 rounded border hover:bg-white">
+    Guardar tracking
+  </button>
+  <a href={`/api/orders/${o.id}/label`} target="_blank" className="px-2 py-1 rounded border hover:bg-white">
+    Ver etiqueta PDF
+  </a>
+  <button
+    onClick={async ()=>{
+      await fetch(`/api/orders/${o.id}/send-invoice`, { method:"POST" });
+      alert("Boleta enviada");
+    }}
+    className="px-2 py-1 rounded border hover:bg-white"
+  >
+    Enviar boleta
+  </button>
+</div>
                   <div className="text-xs text-slate-500 mt-1">
                     {o.shipment?.carrier || o.shipment?.tracking
                       ? `Actual: ${o.shipment?.carrier ?? ""} ${o.shipment?.tracking ?? ""}`.trim()
