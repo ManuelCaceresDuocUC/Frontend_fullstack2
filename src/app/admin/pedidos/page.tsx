@@ -232,22 +232,60 @@ function Row(props: {
                     className="w-full px-2 py-1 rounded border"
                   />
                   <div className="mt-2 flex gap-2">
-  <button onClick={()=>onSaveTracking(o.id, carrier, tracking)} className="px-2 py-1 rounded border hover:bg-white">
-    Guardar tracking
-  </button>
-  <a href={`/api/orders/${o.id}/label`} target="_blank" className="px-2 py-1 rounded border hover:bg-white">
-    Ver etiqueta PDF
-  </a>
-  <button
-    onClick={async ()=>{
-      await fetch(`/api/orders/${o.id}/send-invoice`, { method:"POST" });
-      alert("Boleta enviada");
-    }}
-    className="px-2 py-1 rounded border hover:bg-white"
-  >
-    Enviar boleta
-  </button>
-</div>
+                    <button
+                      onClick={() => onSaveTracking(o.id, carrier, tracking)}
+                      className="px-2 py-1 rounded border hover:bg-white"
+                    >
+                      Guardar tracking
+                    </button>
+
+                    <a
+                      href={`/api/orders/${o.id}/label`}
+                      target="_blank"
+                      rel="noopener"
+                      className="px-2 py-1 rounded border hover:bg-white inline-flex items-center"
+                    >
+                      Ver etiqueta PDF
+                    </a>
+
+                    <button
+                      onClick={async () => {
+                        const r = await fetch(`/api/orders/${o.id}/send-invoice`, { method: "POST" });
+                        if (!r.ok) alert(await r.text());
+                        else alert("Boleta enviada");
+                      }}
+                      disabled={!(carrier && tracking && o.status === "PAID")}
+                      className="px-2 py-1 rounded border hover:bg-white disabled:opacity-50"
+                    >
+                      Enviar boleta
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        const r = await fetch("/api/dte/boleta", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ orderId: o.id, tipo: 39 }),
+                        });
+                        const j = await r.json();
+                        if (!r.ok) alert(JSON.stringify(j));
+                        else alert(`DTE enviado. TrackID: ${j.trackid || "—"}`);
+                      }}
+                      className="px-2 py-1 rounded border hover:bg-white"
+                    >
+                      Emitir DTE (SII Cert)
+                    </button>
+
+                    <a
+                      href={`/api/dte/${o.id}/pdf`}
+                      target="_blank"
+                      rel="noopener"
+                      className="px-2 py-1 rounded border hover:bg-white inline-flex items-center"
+                    >
+                      Descargar Boleta PDF
+                    </a>
+                  </div>
+
                   <div className="text-xs text-slate-500 mt-1">
                     {o.shipment?.carrier || o.shipment?.tracking
                       ? `Actual: ${o.shipment?.carrier ?? ""} ${o.shipment?.tracking ?? ""}`.trim()
