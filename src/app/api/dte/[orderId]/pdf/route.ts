@@ -6,9 +6,8 @@ import { buildInvoicePDF } from "@/lib/invoice";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Ctx = { params: { orderId: string } };
-
-export async function GET(_req: Request, { params }: Ctx) {
+export async function GET(_req: Request, context: unknown) {
+  const { params } = context as { params: { orderId: string } };
   const id = params.orderId;
 
   const o = await prisma.order.findUnique({
@@ -17,24 +16,34 @@ export async function GET(_req: Request, { params }: Ctx) {
   });
   if (!o) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
 
-  const invoiceNumber = `B-${String(o.createdAt.getFullYear()).slice(-2)}${o.id.slice(0, 6).toUpperCase()}`;
+  const dte = await prisma.dte.findUnique({ where: { orderId: id } });
+  const folioStr = dte
+    ? `Folio SII: ${dte.folio}`
+    : `Boleta provisoria: B-${String(o.createdAt.getFullYear()).slice(-2)}${o.id
+        .slice(0, 6)
+        .toUpperCase()}`;
 
   const pdf = await buildInvoicePDF({
     orderId: o.id,
-    number: invoiceNumber,
+    number: folioStr,
     buyerName: o.buyerName,
     email: o.email,
     items: o.items.map(i => ({
-      name: i.name, brand: i.brand, ml: i.ml, unitPrice: i.unitPrice, qty: i.qty,
+      name: i.name,
+      brand: i.brand,
+      ml: i.ml,
+      unitPrice: i.unitPrice,
+      qty: i.qty,
     })),
     subtotal: o.subtotal,
     shippingFee: o.shippingFee,
     total: o.total,
     address: {
-      street: o.shippingStreet, city: o.shippingCity,
-      region: o.shippingRegion, zip: o.shippingZip ?? undefined,
+      street: o.shippingStreet,
+      city: o.shippingCity,
+      region: o.shippingRegion,
+      zip: o.shippingZip || undefined,
     },
-    // puedes incluir bandera: inCertification: true
   });
 
   const bytes = pdf instanceof Uint8Array ? pdf : new Uint8Array(pdf);
@@ -44,7 +53,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="Boleta_${invoiceNumber}.pdf"`,
+      "Content-Disposition": `inline; filename="Boleta_${o.id}.pdf"`,
       "Cache-Control": "no-store",
       "Content-Length": String(bytes.byteLength),
     },
