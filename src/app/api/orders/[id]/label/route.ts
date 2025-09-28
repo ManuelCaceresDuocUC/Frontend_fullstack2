@@ -23,11 +23,12 @@ export async function GET(_req: Request, context: unknown) {
     });
     if (!o) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
 
-    const carrier = o.shipment?.carrier ?? (o.shippingRegion === "Valparaíso" ? "Despacho propio" : "Bluexpress");
-    const tracking = o.shipment?.tracking ?? `BX-${o.id.slice(0, 8).toUpperCase()}`;
+    const carrier   = o.shipment?.carrier ?? (o.shippingRegion === "Valparaíso" ? "Despacho propio" : "Bluexpress");
+    const tracking  = o.shipment?.tracking ?? `BX-${o.id.slice(0, 8).toUpperCase()}`;
     const remitente = process.env.LABEL_SENDER_NAME || "MAfums";
     const remitAddr = process.env.LABEL_SENDER_ADDR || "Valparaíso, Chile";
 
+    // Assets
     const qrPng = await qrToBuffer(tracking, { errorCorrectionLevel: "M", margin: 0, width: 600, type: "png" });
     const barcodePng = await bwipjs.toBuffer({
       bcid: "code128",
@@ -40,52 +41,85 @@ export async function GET(_req: Request, context: unknown) {
       paddingheight: 0,
     });
 
+    // PDF
     const pdf = await PDFDocument.create();
     const page = pdf.addPage([W, H]);
     const helv = await pdf.embedFont(StandardFonts.Helvetica);
     const helvB = await pdf.embedFont(StandardFonts.HelveticaBold);
+
     const draw = (t: string, x: number, y: number, size = 12, bold = false) =>
       page.drawText(t, { x, y, size, font: bold ? helvB : helv, color: rgb(0, 0, 0) });
 
     // Marco
     page.drawRectangle({ x: mm(2), y: mm(2), width: W - mm(4), height: H - mm(4), borderColor: rgb(0, 0, 0), borderWidth: 1 });
 
-    // Header
-    draw(carrier, mm(6), H - mm(16), 14);
-    draw(tracking, mm(6), H - mm(30), 26, true);
-    draw(new Intl.DateTimeFormat("es-CL", { dateStyle: "short", timeStyle: "short" }).format(o.createdAt), mm(6), H - mm(38), 9);
+    // ===== Layout V2 con cursor =====
+    const PAD = mm(6);
+    let y = H - PAD;
 
-    // Código de barras
-    const bcImg = await pdf.embedPng(barcodePng);
-    page.drawImage(bcImg, { x: mm(6), y: H - mm(56), width: W - mm(20), height: mm(20) });
-
-    // QR
+    // QR fijo arriba-derecha
     const qrImg = await pdf.embedPng(qrPng);
-    const qrSize = mm(40);
-    const qrX = W - qrSize - mm(8);
-    const qrY = H - qrSize - mm(8);
+    const qrSize = mm(36);
+    const qrX = W - PAD - qrSize;
+    const qrY = H - PAD - qrSize;
     page.drawImage(qrImg, { x: qrX, y: qrY, width: qrSize, height: qrSize });
-    draw("Escanea para seguimiento", qrX, qrY - mm(4), 8);
+    page.drawText("Escanea seguimiento", { x: qrX - mm(2), y: qrY - mm(3), size: 8, font: helv });
 
-    // Destinatario
-    const yBox = H - mm(96);
-    page.drawRectangle({ x: mm(4), y: yBox, width: W - mm(8), height: mm(52), borderColor: rgb(0, 0, 0), borderWidth: 1 });
-    draw("DESTINATARIO", mm(7), yBox + mm(45), 11, true);
-    draw(o.buyerName, mm(7), yBox + mm(36), 12);
-    draw(`${o.shippingStreet}`, mm(7), yBox + mm(27), 10);
-    draw(`${o.shippingCity}, ${o.shippingRegion}${o.shippingZip ? ` · CP ${o.shippingZip}` : ""}`, mm(7), yBox + mm(18), 10);
-    draw("OBSERVACIONES:", mm(7), yBox + mm(10), 10, true);
-    draw((o.shippingNotes || "—").slice(0, 60), mm(7), yBox + mm(4), 9);
+    // Header izquierda con cursor
+    const flow = (t: string, size = 12, bold = false) => { draw(t, PAD, y, size, bold); y -= size + 3; };
 
-    // Totales y remitente
+    flow(carrier, 14, false);
+    flow(tracking, 26, true);
+    flow(new Intl.DateTimeFormat("es-CL", { dateStyle: "short", timeStyle: "short" }).format(o.createdAt), 9);
+
+    // Separador
+    page.drawLine({ start: { x: PAD, y }, end: { x: W - PAD, y }, thickness: 0.8, color: rgb(0, 0, 0) });
+    y -= mm(4);
+
+    // Código de barras debajo del header
+    const bcImg = await pdf.embedPng(barcodePng);
+    const bcH = mm(18);
+    const bcW = W - PAD * 2;
+    page.drawImage(bcImg, { x: PAD, y: y - bcH, width: bcW, height: bcH });
+    y -= bcH + mm(4);
+
+    // Caja destinatario completa bajo el barcode
+    const boxTop = y;
+    const boxH = mm(58);
+    page.drawRectangle({
+      x: PAD - mm(2),
+      y: boxTop - boxH,
+      width: W - (PAD - mm(2)) * 2,
+      height: boxH,
+      borderColor: rgb(0, 0, 0),
+      borderWidth: 1,
+    });
+
+    let yb = boxTop - mm(6);
+    const put = (t: string, size = 10, bold = false) => { draw(t, PAD, yb, size, bold); yb -= size + 4; };
+
+    put("DESTINATARIO", 11, true);
+    put(o.buyerName, 12);
+    put(`${o.shippingStreet}`, 10);
+    put(`${o.shippingCity}, ${o.shippingRegion}${o.shippingZip ? ` · CP ${o.shippingZip}` : ""}`, 10);
+    put("OBSERVACIONES:", 10, true);
+    put((o.shippingNotes || "—").slice(0, 60), 9);
+
+    // Avanza cursor general por debajo de la caja
+    y = (boxTop - boxH) - mm(6);
+
+    // ===== Fin layout V2 =====
+
+    // Totales y remitente en zona baja estable
     draw(`TOTAL: ${o.total.toLocaleString("es-CL")}`, mm(6), mm(60), 11, true);
     draw(`Orden: ${o.id}`, mm(6), mm(52), 9);
+
     page.drawLine({ start: { x: mm(4), y: mm(28) }, end: { x: W - mm(4), y: mm(28) }, thickness: 1, color: rgb(0, 0, 0) });
     draw("REMITENTE", mm(7), mm(22), 10, true);
     draw(`${remitente} · ${remitAddr}`, mm(7), mm(14), 9);
 
     // Respuesta
-    const bytes = await pdf.save(); // Uint8Array
+    const bytes = await pdf.save();
     const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 
     return new Response(ab, {
