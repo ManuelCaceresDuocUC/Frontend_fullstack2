@@ -5,7 +5,9 @@ import { create } from "xmlbuilder2";
 import { SignedXml } from "xml-crypto";
 import { loadP12KeyAndCert } from "./cert";
 import { ensureMtlsDispatcher } from "@/lib/cert";
-
+import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
+(globalThis as unknown as { DOMParser?: unknown }).DOMParser ??= DOMParser as unknown;
+(globalThis as unknown as { XMLSerializer?: unknown }).XMLSerializer ??= XMLSerializer as unknown;
 /** ==================== CAF & Cert ===================== */
 
 type Caf = {
