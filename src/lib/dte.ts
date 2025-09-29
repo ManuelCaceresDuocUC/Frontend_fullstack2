@@ -35,6 +35,7 @@ function withKey(sig: SignedXml, certB64: string, key: import("crypto").KeyObjec
     getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
   };
 }
+
 export function loadCAF(tipo: 39 | 41): Caf {
   const b64 = tipo === 39 ? process.env.CAF_39_B64 : process.env.CAF_41_B64;
   let xml: string | undefined;
@@ -214,12 +215,19 @@ function signXmlEnveloped(xml: string): string {
   return sig.getSignedXml();
 }
 
+function stripXmlDecl(s: string) {
+  return s.replace(/^\s*<\?xml[^?]*\?>\s*/i, "");
+}
 
 async function getTokenFromSeed(signedXml: string): Promise<string> {
-  const env = soapEnv(`<getTokenFromSeed><pszXml>${signedXml}</pszXml></getTokenFromSeed>`);
+  const inner = stripXmlDecl(signedXml);
+  const env = soapEnv(
+    `<getTokenFromSeed><pszXml><![CDATA[${inner}]]></pszXml></getTokenFromSeed>`
+  );
   const resp = await postSOAP(`/DTEWS/GetTokenFromSeed.jws`, env);
   return pick(resp, "TOKEN");
 }
+
 
 export async function getToken(): Promise<string> {
   const hasCert = !!process.env.SII_CERT_P12_B64 || !!process.env.SII_CERT_P12_PATH;
@@ -256,6 +264,7 @@ function buildSobreEnvio(dteXml: string): string {
 
 // Firma del Sobre EnvioDTE
 // firma sobre EnvioDTE
+
 function signSobreXML(xmlSobre: string): string {
   const { key, certPem } = loadP12KeyAndCert();
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
