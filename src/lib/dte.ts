@@ -222,11 +222,14 @@ function stripXmlDecl(s: string) {
 async function getTokenFromSeed(signedXml: string): Promise<string> {
   const inner = stripXmlDecl(signedXml);
   const env = soapEnv(
-    `<getTokenFromSeed><pszXml><![CDATA[${inner}]]></pszXml></getTokenFromSeed>`
+    `<m:getTokenFromSeed xmlns:m="http://DefaultNamespace">
+       <pszXml><![CDATA[${inner}]]></pszXml>
+     </m:getTokenFromSeed>`
   );
   const resp = await postSOAP(`/DTEWS/GetTokenFromSeed.jws`, env);
   return pick(resp, "TOKEN");
 }
+
 
 
 export async function getToken(): Promise<string> {
