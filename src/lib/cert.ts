@@ -14,9 +14,9 @@ function must(name: string): string {
   return v.trim();
 }
 export function loadP12KeyAndCert(): { key: KeyObject; keyPem: string; certPem: string } {
-  const { keyPem, certPem } = loadP12PEM();          // tu función actual
-  // crea KeyObject; autodetecta PKCS#1 o PKCS#8
-  const key = createPrivateKey({ key: keyPem });      // sin passphrase
+  const { keyPem: rawKeyPem, certPem } = loadP12PEM(); // certPem es const
+  const keyPem = rawKeyPem.replace(/\r/g, "");         // normaliza CRLF
+  const key = createPrivateKey({ key: keyPem });
   return { key, keyPem, certPem };
 }
 // .p12 desde B64 o PATH

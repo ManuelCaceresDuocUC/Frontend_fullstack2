@@ -20,15 +20,19 @@ type LegacySignedXml = SignedXml & {
   signingKey: string | Buffer;
   keyInfoProvider: { getKeyInfo: () => string };
 };
-function withKey(sig: SignedXml, certB64: string, signingKey: import("crypto").KeyObject) {
-  const sx = sig as unknown as {
-    signingKey: import("crypto").KeyObject;
-    keyInfoProvider: { getKeyInfo: () => string };
+function withKey(sig: SignedXml, certB64: string, key: import("crypto").KeyObject) {
+  const sxa = sig as unknown as {
+    signingKey?: unknown; key?: unknown; privateKey?: unknown;
+    keyInfoProvider?: { getKeyInfo: () => string };
   };
-  sx.signingKey = signingKey; // << KeyObject, no string
-  sx.keyInfoProvider = {
-    getKeyInfo: () =>
-      `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+
+  // setea en TODOS los nombres usados por distintas versiones
+  sxa.signingKey = key;
+  sxa.key = key;
+  sxa.privateKey = key;
+
+  sxa.keyInfoProvider = {
+    getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
   };
 }
 export function loadCAF(tipo: 39 | 41): Caf {
