@@ -156,8 +156,20 @@ const pick = (xml: string, tag: string): string => {
 export async function getSeed(): Promise<string> {
   const env = soapEnv(`<getSeed/>`);
   const resp = await postSOAP(`/DTEWS/CrSeed.jws`, env);
-  const m = resp.match(/<SEMILLA>([^<]+)<\/SEMILLA>/i);
-  if (!m) throw new Error(`No <SEMILLA> en respuesta. Head: ${resp.slice(0, 400)}`);
+
+  // Paso 1: sacar el contenido de <getSeedReturn>
+  const inner = resp.match(/<getSeedReturn[^>]*>([\s\S]*?)<\/getSeedReturn>/i);
+  if (!inner) throw new Error(`No <getSeedReturn> en respuesta. Head: ${resp.slice(0,400)}`);
+
+  // Paso 2: des-escapar entidades XML (&lt;...&gt;)
+  const decoded = inner[1]
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+
+  // Paso 3: buscar la semilla real
+  const m = decoded.match(/<SEMILLA>([^<]+)<\/SEMILLA>/i);
+  if (!m) throw new Error(`No <SEMILLA> en respuesta decodificada. Head: ${decoded.slice(0,200)}`);
   return m[1].trim();
 }
 
