@@ -261,20 +261,32 @@ function Row(props: {
                     </button>
 
                     <button
-                      onClick={async () => {
-                        const r = await fetch("/api/dte/boleta", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ orderId: o.id, tipo: 39 }),
-                        });
-                        const j = await r.json();
-                        if (!r.ok) alert(JSON.stringify(j));
-                        else alert(`DTE enviado. TrackID: ${j.trackid || "—"}`);
-                      }}
-                      className="px-2 py-1 rounded border hover:bg-white"
-                    >
-                      Emitir DTE (SII Cert)
-                    </button>
+  onClick={async () => {
+    try {
+      const r = await fetch("/api/dte/boleta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: o.id, tipo: 39 }),
+      });
+
+      const txt = await r.text();
+      const j = (() => { try { return JSON.parse(txt); } catch { return { error: txt }; } })();
+
+      if (!r.ok) {
+        alert(`Error DTE: ${j.error ?? txt ?? r.status}`);
+        return;
+      }
+      alert(`DTE enviado. TrackID: ${j.trackid || "—"}`);
+    } catch (e: unknown) {
+  const msg = e instanceof Error ? e.message : String(e);
+  console.error("Emitir DTE falló:", msg);
+  alert(`Fallo al emitir: ${msg}`);
+}
+  }}
+  className="px-2 py-1 rounded border hover:bg-white"
+>
+  Emitir DTE (SII Cert)
+</button>
 
                     <a
                       href={`/api/dte/${o.id}/pdf`}
