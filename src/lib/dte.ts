@@ -184,7 +184,8 @@ export async function getSeed(): Promise<string> {
 
 
 function buildSeedXML(seed: string): string {
-  return `<getToken xmlns="http://www.sii.cl/SiiDte"><item><Semilla>${seed}</Semilla></item></getToken>`;
+  // sin xmlns ni <?xml ...?>
+  return `<getToken><item><Semilla>${seed}</Semilla></item></getToken>`;
 }
 
 // Firma del getToken (seed)
@@ -218,7 +219,6 @@ function stripXmlDecl(s: string) {
 
 async function getTokenFromSeed(signedXml: string): Promise<string> {
   const inner = stripXmlDecl(signedXml);
-
   const ns = (process.env.SII_ENV || "cert").toLowerCase() === "prod"
     ? "https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws"
     : "https://palena.sii.cl/DTEWS/GetTokenFromSeed.jws";
@@ -229,7 +229,6 @@ async function getTokenFromSeed(signedXml: string): Promise<string> {
 
   const resp = await postSOAP(`/DTEWS/GetTokenFromSeed.jws`, env);
 
-  // acepta <getTokenReturn> con o sin prefijo (ns1:)
   const mRet = resp.match(/<(?:\w+:)?getTokenReturn[^>]*>([\s\S]*?)<\/(?:\w+:)?getTokenReturn>/i);
   if (!mRet) throw new Error(`No <getTokenReturn> en respuesta. Head: ${resp.slice(0,400)}`);
 
@@ -237,10 +236,8 @@ async function getTokenFromSeed(signedXml: string): Promise<string> {
 
   const mTok = decoded.match(/<TOKEN>([^<]+)<\/TOKEN>/i);
   if (!mTok) throw new Error(`No <TOKEN> en respuesta decodificada. Head: ${decoded.slice(0,200)}`);
-
   return mTok[1].trim();
 }
-
 
 
 
