@@ -3,8 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { create } from "xmlbuilder2";
 import { SignedXml } from "xml-crypto";
-import { loadP12PEM } from "./cert";
-import { loadP12KeyAndCert } from "./cert"; 
+import { loadP12KeyAndCert } from "./cert";
 import { ensureMtlsDispatcher } from "@/lib/cert";
 
 /** ==================== CAF & Cert ===================== */
@@ -18,21 +17,15 @@ type Caf = {
   razon: string;
   xml: string;
 };
-type LegacySignedXml = SignedXml & {
-  signingKey: string | Buffer;
-  keyInfoProvider: { getKeyInfo: () => string };
-};
+
 function withKey(sig: SignedXml, certB64: string, key: import("crypto").KeyObject) {
   const sxa = sig as unknown as {
     signingKey?: unknown; key?: unknown; privateKey?: unknown;
     keyInfoProvider?: { getKeyInfo: () => string };
   };
-
-  // setea en TODOS los nombres usados por distintas versiones
   sxa.signingKey = key;
   sxa.key = key;
   sxa.privateKey = key;
-
   sxa.keyInfoProvider = {
     getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
   };
@@ -92,7 +85,8 @@ export function buildDTE({
 }) {
   const neto = Math.round(items.filter(i => !i.exento).reduce((a, i) => a + i.qty * i.precioNeto, 0));
   const iva = Math.round(neto * 0.19);
-  const total = neto + iva + items.filter(i => i.exento).reduce((a, i) => a + i.qty * i.precioNeto, 0);
+  const total =
+    neto + iva + items.filter(i => i.exento).reduce((a, i) => a + i.qty * i.precioNeto, 0);
 
   const root = create({ version: "1.0", encoding: "ISO-8859-1" })
     .ele("DTE", { version: "1.0" })
@@ -154,12 +148,12 @@ async function postSOAP(path: string, body: string): Promise<string> {
       "Accept": "text/xml,application/xml,text/plain",
       "SOAPAction": "",
     },
-body: Buffer.from(body, "latin1"),
+    body: Buffer.from(body, "latin1"),
   });
 
   const txt = await res.text();
-  // debug dentro de la función, usando "res", no "r"
-  console.error("[SII SOAP]", path, "status:", res.status, "len:", txt.length, "head:", txt.slice(0, 200));
+  // debug opcional
+  // console.error("[SII SOAP]", path, "status:", res.status, "len:", txt.length, "head:", txt.slice(0, 200));
 
   if (!res.ok) throw new Error(`SOAP ${path} ${res.status}: ${txt.slice(0, 400)}`);
   return txt;
@@ -173,55 +167,44 @@ const pick = (xml: string, tag: string): string => {
 
 /** ============ Seed + Token ============ */
 
-// 1) Decodifica getSeedReturn escapado
 export async function getSeed(): Promise<string> {
   const env = soapEnv(`<getSeed/>`);
   const resp = await postSOAP(`/DTEWS/CrSeed.jws`, env);
 
-  const inner = resp.match(/<getSeedReturn[^>]*>([\s\S]*?)<\/getSeedReturn>/i);
-  if (!inner) throw new Error(`No <getSeedReturn> en respuesta. Head: ${resp.slice(0,400)}`);
+  const inner = resp.match(/<getSeedReturn[^>]*>([\s\\S]*?)<\/getSeedReturn>/i)
+    || resp.match(/<(?:\w+:)?getSeedReturn[^>]*>([\s\S]*?)<\/(?:\w+:)?getSeedReturn>/i);
+  if (!inner) throw new Error(`No <getSeedReturn> en respuesta. Head: ${resp.slice(0, 400)}`);
 
   const decoded = inner[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
   const m = decoded.match(/<SEMILLA>([^<]+)<\/SEMILLA>/i);
-  if (!m) throw new Error(`No <SEMILLA> en respuesta decodificada. Head: ${decoded.slice(0,200)}`);
+  if (!m) throw new Error(`No <SEMILLA> en respuesta decodificada. Head: ${decoded.slice(0, 200)}`);
   return m[1].trim();
 }
 
-
 function buildSeedXML(seed: string): string {
-  // con namespace oficial + atributo ID
-  return `<getToken xmlns="http://www.sii.cl/SiiDte" ID="GT">
-    <item><Semilla>${seed}</Semilla></item>
-  </getToken>`;
+  return `<getToken xmlns="http://www.sii.cl/SiiDte" ID="GT"><item><Semilla>${seed}</Semilla></item></getToken>`;
 }
 
-// Firma del getToken (seed)
-// firma seed
 function signXmlEnveloped(xml: string): string {
   const { key, certPem } = loadP12KeyAndCert();
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
-
   const sig = new SignedXml({
     idAttribute: "ID",
     canonicalizationAlgorithm: "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
     signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
   });
-
   withKey(sig, certB64, key);
-
   sig.addReference({
-    uri: "#GT", // <- firma exactamente el <getToken ID="GT">
+    uri: "#GT",
     transforms: [
       "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
       "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
     ],
     digestAlgorithm: "http://www.w3.org/2000/09/xmldsig#sha1",
   });
-
   sig.computeSignature(xml);
   return sig.getSignedXml();
 }
-
 
 function stripXmlDecl(s: string) {
   return s.replace(/^\s*<\?xml[^?]*\?>\s*/i, "");
@@ -230,31 +213,25 @@ function stripXmlDecl(s: string) {
 async function getTokenFromSeed(signedXml: string): Promise<string> {
   const inner = stripXmlDecl(signedXml);
 
-  const ns = (process.env.SII_ENV || "cert").toLowerCase() === "prod"
+  const ns = SII_ENV === "prod"
     ? "https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws"
     : "https://palena.sii.cl/DTEWS/GetTokenFromSeed.jws";
 
   const env = soapEnv(
-    `<m:getToken xmlns:m="${ns}">
-       <pszXml><![CDATA[${inner}]]></pszXml>
-     </m:getToken>`
+    `<m:getToken xmlns:m="${ns}"><pszXml><![CDATA[${inner}]]></pszXml></m:getToken>`
   );
 
   const resp = await postSOAP(`/DTEWS/GetTokenFromSeed.jws`, env);
 
   const mRet = resp.match(/<(?:\w+:)?getTokenReturn[^>]*>([\s\S]*?)<\/(?:\w+:)?getTokenReturn>/i);
-  if (!mRet) throw new Error(`No <getTokenReturn> en respuesta. Head: ${resp.slice(0,400)}`);
+  if (!mRet) throw new Error(`No <getTokenReturn> en respuesta. Head: ${resp.slice(0, 400)}`);
 
   const decoded = mRet[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 
   const mTok = decoded.match(/<TOKEN>([^<]+)<\/TOKEN>/i);
-  if (!mTok) throw new Error(`No <TOKEN> en respuesta decodificada. Head: ${decoded.slice(0,200)}`);
+  if (!mTok) throw new Error(`No <TOKEN> en respuesta decodificada. Head: ${decoded.slice(0, 200)}`);
   return mTok[1].trim();
 }
-
-
-
-
 
 export async function getToken(): Promise<string> {
   const hasCert = !!process.env.SII_CERT_P12_B64 || !!process.env.SII_CERT_P12_PATH;
@@ -273,7 +250,7 @@ export async function getToken(): Promise<string> {
 function buildSobreEnvio(dteXml: string): string {
   const now = new Date().toISOString().slice(0, 19);
   return `<?xml version="1.0" encoding="ISO-8859-1"?>
-<EnvioDTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
+<EnvioDTE xmlns="http://www.sii.cl/SiiDte" version="1.0" ID="ENV">
   <SetDTE ID="SetDoc">
     <Caratula version="1.0">
       <RutEmisor>${process.env.BILLING_RUT}</RutEmisor>
@@ -289,54 +266,33 @@ function buildSobreEnvio(dteXml: string): string {
 </EnvioDTE>`;
 }
 
-// Firma del Sobre EnvioDTE
-// firma sobre EnvioDTE
-
 function signSobreXML(xmlSobre: string): string {
   const { key, certPem } = loadP12KeyAndCert();
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
-
   const sig = new SignedXml({
+    idAttribute: "ID",
     canonicalizationAlgorithm: "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
     signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
   });
-
   withKey(sig, certB64, key);
   sig.addReference({
-    xpath: "/*[local-name(.)='EnvioDTE']",
+    uri: "#ENV",
     transforms: [
       "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
       "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
     ],
     digestAlgorithm: "http://www.w3.org/2000/09/xmldsig#sha1",
   });
-
   sig.computeSignature(xmlSobre);
   return sig.getSignedXml();
 }
 
-
 export async function sendEnvioDTE(xmlDte: string, token: string) {
-  const sobre = buildSobreEnvio(xmlDte);
-  const firmado = signSobreXML(sobre);
-
+  const firmado = signSobreXML(buildSobreEnvio(xmlDte));
   const env = soapEnv(
     `<upload><fileName>SetDTE.xml</fileName><contentFile><![CDATA[${firmado}]]></contentFile></upload>`
   );
-
-  const r = await fetch(`${BASE}/DTEWS/EnvioDTE.jws`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/xml; charset=ISO-8859-1",
-      "Accept": "text/xml,application/xml,text/plain",
-      "SOAPAction": "",
-      "Cookie": `TOKEN=${token}`,
-    },
-    body: env,
-  });
-  const txt = await r.text();
-  console.error("[SII SOAP] /EnvioDTE status:", r.status, "len:", txt.length, "head:", txt.slice(0, 200));
-  if (!r.ok) throw new Error(`SOAP EnvioDTE ${r.status}: ${txt.slice(0, 400)}`);
+  const txt = await postSOAP(`/DTEWS/EnvioDTE.jws`, env);
   const trackid = pick(txt, "TRACKID");
   return { trackid };
 }
