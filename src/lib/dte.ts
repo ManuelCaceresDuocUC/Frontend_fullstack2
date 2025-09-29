@@ -19,14 +19,16 @@ type Caf = {
 };
 
 function withKey(sig: SignedXml, certB64: string, key: import("crypto").KeyObject) {
-  const sxa = sig as unknown as {
-    signingKey?: unknown; key?: unknown; privateKey?: unknown;
+  const target = sig as unknown as {
+    signingKey?: import("crypto").KeyObject;
+    key?: import("crypto").KeyObject;
+    privateKey?: import("crypto").KeyObject;
     keyInfoProvider?: { getKeyInfo: () => string };
   };
-  sxa.signingKey = key;
-  sxa.key = key;
-  sxa.privateKey = key;
-  sxa.keyInfoProvider = {
+  target.signingKey = key;
+  target.key = key;
+  target.privateKey = key;
+  target.keyInfoProvider = {
     getKeyInfo: () => `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
   };
 }
@@ -137,24 +139,28 @@ const BASE = SII_ENV === "prod" ? "https://maullin.sii.cl" : "https://palena.sii
 const soapEnv = (inner: string) =>
   `<?xml version="1.0" encoding="ISO-8859-1"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body>${inner}</soapenv:Body></soapenv:Envelope>`;
 
-async function postSOAP(path: string, body: string): Promise<string> {
+async function postSOAP(
+  path: string,
+  body: string,
+  extraHeaders?: Readonly<Record<string, string>>,
+): Promise<string> {
   ensureMtlsDispatcher();
   const url = `${BASE}${path}`;
 
+  const headers: Record<string, string> = {
+    "Content-Type": "text/xml; charset=ISO-8859-1",
+    "Accept": "text/xml,application/xml,text/plain",
+    "SOAPAction": "",
+    ...(extraHeaders ?? {}),
+  };
+
   const res = await fetch(url, {
     method: "POST",
-    headers: {
-      "Content-Type": "text/xml; charset=ISO-8859-1",
-      "Accept": "text/xml,application/xml,text/plain",
-      "SOAPAction": "",
-    },
+    headers,
     body: Buffer.from(body, "latin1"),
   });
 
   const txt = await res.text();
-  // debug opcional
-  // console.error("[SII SOAP]", path, "status:", res.status, "len:", txt.length, "head:", txt.slice(0, 200));
-
   if (!res.ok) throw new Error(`SOAP ${path} ${res.status}: ${txt.slice(0, 400)}`);
   return txt;
 }
@@ -171,8 +177,8 @@ export async function getSeed(): Promise<string> {
   const env = soapEnv(`<getSeed/>`);
   const resp = await postSOAP(`/DTEWS/CrSeed.jws`, env);
 
-  const inner = resp.match(/<getSeedReturn[^>]*>([\s\\S]*?)<\/getSeedReturn>/i)
-    || resp.match(/<(?:\w+:)?getSeedReturn[^>]*>([\s\S]*?)<\/(?:\w+:)?getSeedReturn>/i);
+  const inner =
+    resp.match(/<(?:\w+:)?getSeedReturn[^>]*>([\s\S]*?)<\/(?:\w+:)?getSeedReturn>/i);
   if (!inner) throw new Error(`No <getSeedReturn> en respuesta. Head: ${resp.slice(0, 400)}`);
 
   const decoded = inner[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -185,6 +191,27 @@ function buildSeedXML(seed: string): string {
   return `<getToken xmlns="http://www.sii.cl/SiiDte" ID="GT"><item><Semilla>${seed}</Semilla></item></getToken>`;
 }
 
+// helper sin "any" para addReference por URI
+type AddRefOpts = {
+  uri: string;
+  transforms: string[];
+  digestAlgorithm: string;
+};
+function addRefById(sig: SignedXml, id: string) {
+  // expone idAttributes para implementación de xml-crypto
+  (sig as unknown as { idAttributes?: string[] }).idAttributes = ["ID", "Id"];
+
+  // llama al método con opciones de objeto (v6)
+  (sig as unknown as { addReference: (opts: AddRefOpts) => void }).addReference({
+    uri: `#${id}`,
+    transforms: [
+      "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
+      "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+    ],
+    digestAlgorithm: "http://www.w3.org/2000/09/xmldsig#sha1",
+  });
+}
+
 function signXmlEnveloped(xml: string): string {
   const { key, certPem } = loadP12KeyAndCert();
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
@@ -194,14 +221,7 @@ function signXmlEnveloped(xml: string): string {
     signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
   });
   withKey(sig, certB64, key);
-  sig.addReference({
-    uri: "#GT",
-    transforms: [
-      "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
-      "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
-    ],
-    digestAlgorithm: "http://www.w3.org/2000/09/xmldsig#sha1",
-  });
+  addRefById(sig, "GT");
   sig.computeSignature(xml);
   return sig.getSignedXml();
 }
@@ -213,9 +233,10 @@ function stripXmlDecl(s: string) {
 async function getTokenFromSeed(signedXml: string): Promise<string> {
   const inner = stripXmlDecl(signedXml);
 
-  const ns = SII_ENV === "prod"
-    ? "https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws"
-    : "https://palena.sii.cl/DTEWS/GetTokenFromSeed.jws";
+  const ns =
+    SII_ENV === "prod"
+      ? "https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws"
+      : "https://palena.sii.cl/DTEWS/GetTokenFromSeed.jws";
 
   const env = soapEnv(
     `<m:getToken xmlns:m="${ns}"><pszXml><![CDATA[${inner}]]></pszXml></m:getToken>`
@@ -223,7 +244,8 @@ async function getTokenFromSeed(signedXml: string): Promise<string> {
 
   const resp = await postSOAP(`/DTEWS/GetTokenFromSeed.jws`, env);
 
-  const mRet = resp.match(/<(?:\w+:)?getTokenReturn[^>]*>([\s\S]*?)<\/(?:\w+:)?getTokenReturn>/i);
+  const mRet =
+    resp.match(/<(?:\w+:)?getTokenReturn[^>]*>([\s\S]*?)<\/(?:\w+:)?getTokenReturn>/i);
   if (!mRet) throw new Error(`No <getTokenReturn> en respuesta. Head: ${resp.slice(0, 400)}`);
 
   const decoded = mRet[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -275,14 +297,7 @@ function signSobreXML(xmlSobre: string): string {
     signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
   });
   withKey(sig, certB64, key);
-  sig.addReference({
-    uri: "#ENV",
-    transforms: [
-      "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
-      "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
-    ],
-    digestAlgorithm: "http://www.w3.org/2000/09/xmldsig#sha1",
-  });
+  addRefById(sig, "ENV");
   sig.computeSignature(xmlSobre);
   return sig.getSignedXml();
 }
@@ -292,7 +307,7 @@ export async function sendEnvioDTE(xmlDte: string, token: string) {
   const env = soapEnv(
     `<upload><fileName>SetDTE.xml</fileName><contentFile><![CDATA[${firmado}]]></contentFile></upload>`
   );
-  const txt = await postSOAP(`/DTEWS/EnvioDTE.jws`, env);
+  const txt = await postSOAP(`/DTEWS/EnvioDTE.jws`, env, { Cookie: `TOKEN=${token}` });
   const trackid = pick(txt, "TRACKID");
   return { trackid };
 }
