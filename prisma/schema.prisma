@@ -1,3 +1,4 @@
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,18 +8,73 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Genero {
+  HOMBRE
+  MUJER
+  UNISEX
+}
+
+enum Perfume_category {
+  NICHO
+  ARABES
+  DISENADOR
+  OTROS
+}
+
+enum User_role {
+  USER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  INITIATED
+  AUTHORIZED
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  WEBPAY
+  SERVIPAG
+  MANUAL
+}
+
+enum DteEstado {
+  ENVIADO
+  ACEPTADO
+  RECHAZADO
+  REPARO
+}
+
 model Dte {
-  id        String   @id @default(cuid())
-  orderId   String   @unique
-  tipo      Int
-  folio     Int
+  id      String @id @default(cuid())
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  tipo  Int
+  folio Int
+
   ted       String
   xml       Bytes
   trackId   String?
-  estadoSii String // ENVIADO|ACEPTADO|RECHAZADO|REPARO
+  estadoSii DteEstado @default(ENVIADO)
   pdfUrl    String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([tipo, folio])
+  @@index([trackId])
+  @@index([estadoSii, createdAt])
 }
 
 model Perfume {
@@ -81,9 +137,11 @@ model Order {
   status         OrderStatus @default(PENDING)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
-  items          OrderItem[]
-  payment        Payment?
-  shipment       Shipment?
+
+  items    OrderItem[]
+  payment  Payment?
+  shipment Shipment?
+  dte      Dte? // back-relation
 
   @@index([status])
   @@index([createdAt])
@@ -132,44 +190,4 @@ model Shipment {
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("shipments")
-}
-
-enum Genero {
-  HOMBRE
-  MUJER
-  UNISEX
-}
-
-enum Perfume_category {
-  NICHO
-  ARABES
-  DISENADOR
-  OTROS
-}
-
-enum User_role {
-  USER
-  ADMIN
-}
-
-enum OrderStatus {
-  PENDING
-  PAID
-  FULFILLED
-  CANCELLED
-  REFUNDED
-}
-
-enum PaymentStatus {
-  INITIATED
-  AUTHORIZED
-  PAID
-  FAILED
-  REFUNDED
-}
-
-enum PaymentMethod {
-  WEBPAY
-  SERVIPAG
-  MANUAL
 }
