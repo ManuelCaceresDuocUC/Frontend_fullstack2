@@ -7,8 +7,13 @@ type PaymentStatus = "INITIATED" | "AUTHORIZED" | "PAID" | "FAILED" | "REFUNDED"
 type PaymentMethod = "WEBPAY" | "SERVIPAG" | "MANUAL";
 
 type OrderItemView = {
-  id: string; perfumeId: string; name: string; brand: string;
-  ml: number | null; unitPrice: number; qty: number;
+  id: string;
+  perfumeId: string;
+  name: string;
+  brand: string;
+  ml: number | null;
+  unitPrice: number;
+  qty: number;
 };
 
 type ShipmentView = { tracking: string | null; carrier: string | null; delivered: boolean };
@@ -23,8 +28,11 @@ type OrderRow = {
   status: OrderStatus;
   payment: PaymentView;
   shipment: ShipmentView | null;
-  shippingStreet: string; shippingCity: string; shippingRegion: string;
-  shippingZip: string; shippingNotes: string;
+  shippingStreet: string;
+  shippingCity: string;
+  shippingRegion: string;
+  shippingZip: string;
+  shippingNotes: string;
   items: OrderItemView[];
 };
 
@@ -44,16 +52,19 @@ export default function AdminOrders() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
     if (!s) return data;
-    return data.filter(o =>
-      o.id.toLowerCase().includes(s) ||
-      o.email.toLowerCase().includes(s) ||
-      o.buyerName.toLowerCase().includes(s) ||
-      o.items.some(it => (it.brand + " " + it.name).toLowerCase().includes(s))
+    return data.filter(
+      (o) =>
+        o.id.toLowerCase().includes(s) ||
+        o.email.toLowerCase().includes(s) ||
+        o.buyerName.toLowerCase().includes(s) ||
+        o.items.some((it) => (it.brand + " " + it.name).toLowerCase().includes(s))
     );
   }, [data, q]);
 
@@ -90,16 +101,23 @@ export default function AdminOrders() {
     // 2) dispara correo con boleta
     const r = await fetch(`/api/orders/${id}/send-invoice`, { method: "POST" });
     if (!r.ok) alert(await r.text());
+    else alert("Boleta enviada");
   }
 
   async function genLabel(id: string) {
     const r = await fetch(`/api/orders/${id}/label`, { method: "GET" });
-    if (!r.ok) { alert(await r.text()); return; }
+    if (!r.ok) {
+      alert(await r.text());
+      return;
+    }
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `Etiqueta_${id}.pdf`;
-    document.body.appendChild(a); a.click(); a.remove();
+    a.href = url;
+    a.download = `Etiqueta_${id}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
     URL.revokeObjectURL(url);
   }
 
@@ -108,9 +126,12 @@ export default function AdminOrders() {
       <div className="h-16 md:h-20" />
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-2xl font-bold">Gestor de pedidos</h1>
-        <button onClick={load} className="px-3 py-1.5 rounded-lg border">Actualizar</button>
+        <button onClick={load} className="px-3 py-1.5 rounded-lg border">
+          Actualizar
+        </button>
         <input
-          value={q} onChange={e=>setQ(e.target.value)}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
           placeholder="Buscar por #id, cliente, email o producto"
           className="flex-1 px-3 py-2 rounded-lg border"
         />
@@ -134,7 +155,7 @@ export default function AdminOrders() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(o => (
+              {filtered.map((o) => (
                 <Row
                   key={o.id}
                   o={o}
@@ -181,17 +202,23 @@ function Row(props: {
           <div className="text-slate-500">{o.status}</div>
         </td>
         <td className="p-2">
-          <div>{o.shippingStreet}, {o.shippingCity}</div>
-          <div className="text-slate-500">{o.shippingRegion} {o.shippingZip}</div>
+          <div>
+            {o.shippingStreet}, {o.shippingCity}
+          </div>
+          <div className="text-slate-500">
+            {o.shippingRegion} {o.shippingZip}
+          </div>
           {o.shippingNotes && <div className="text-slate-500 italic">{o.shippingNotes}</div>}
         </td>
         <td className="p-2 text-right font-semibold">{fmt(o.total)}</td>
         <td className="p-2 text-right">
           <div className="flex gap-2 justify-end">
             {o.status !== "PAID" && (
-              <button onClick={()=>onPaid(o.id)} className="px-2 py-1 rounded border hover:bg-slate-50">Marcar pagado</button>
+              <button onClick={() => onPaid(o.id)} className="px-2 py-1 rounded border hover:bg-slate-50">
+                Marcar pagado
+              </button>
             )}
-            <button onClick={()=>setOpen(v=>!v)} className="px-2 py-1 rounded border hover:bg-slate-50">
+            <button onClick={() => setOpen((v) => !v)} className="px-2 py-1 rounded border hover:bg-slate-50">
               {open ? "Ocultar" : "Ver"}
             </button>
           </div>
@@ -205,9 +232,11 @@ function Row(props: {
               <div className="md:col-span-2">
                 <h3 className="font-semibold mb-2">Items</h3>
                 <ul className="divide-y">
-                  {o.items.map(it => (
+                  {o.items.map((it) => (
                     <li key={it.id} className="py-2 flex justify-between">
-                      <span>{it.brand} {it.name} {it.ml ? `· ${it.ml} ml` : ""} ×{it.qty}</span>
+                      <span>
+                        {it.brand} {it.name} {it.ml ? `· ${it.ml} ml` : ""} ×{it.qty}
+                      </span>
                       <span className="font-medium">{fmt(it.unitPrice * it.qty)}</span>
                     </li>
                   ))}
@@ -220,18 +249,19 @@ function Row(props: {
                   <label className="block text-sm">Carrier</label>
                   <input
                     value={carrier}
-                    onChange={e=>setCarrier(e.target.value)}
+                    onChange={(e) => setCarrier(e.target.value)}
                     placeholder="Bluexpress / Despacho propio"
                     className="w-full px-2 py-1 rounded border"
                   />
                   <label className="block text-sm mt-2">Tracking</label>
                   <input
                     value={tracking}
-                    onChange={e=>setTracking(e.target.value)}
+                    onChange={(e) => setTracking(e.target.value)}
                     placeholder="BX1234567890"
                     className="w-full px-2 py-1 rounded border"
                   />
-                  <div className="mt-2 flex gap-2">
+
+                  <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       onClick={() => onSaveTracking(o.id, carrier, tracking)}
                       className="px-2 py-1 rounded border hover:bg-white"
@@ -239,54 +269,52 @@ function Row(props: {
                       Guardar tracking
                     </button>
 
-                    <a
-                      href={`/api/orders/${o.id}/label`}
-                      target="_blank"
-                      rel="noopener"
+                    <button
+                      onClick={() => onGenLabel(o.id)}
                       className="px-2 py-1 rounded border hover:bg-white inline-flex items-center"
                     >
                       Ver etiqueta PDF
-                    </a>
+                    </button>
 
                     <button
-                      onClick={async () => {
-                        const r = await fetch(`/api/orders/${o.id}/send-invoice`, { method: "POST" });
-                        if (!r.ok) alert(await r.text());
-                        else alert("Boleta enviada");
-                      }}
-                      disabled={!(carrier && tracking && o.status === "PAID")}
+                      onClick={() => onSendInvoice(o.id, carrier, tracking)}
+                      disabled={!canSend}
                       className="px-2 py-1 rounded border hover:bg-white disabled:opacity-50"
                     >
                       Enviar boleta
                     </button>
 
                     <button
-  onClick={async () => {
-    try {
-      const r = await fetch("/api/dte/boleta", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: o.id, tipo: 39 }),
-      });
-
-      const txt = await r.text();
-      const j = (() => { try { return JSON.parse(txt); } catch { return { error: txt }; } })();
-
-      if (!r.ok) {
-        alert(`Error DTE: ${j.error ?? txt ?? r.status}`);
-        return;
-      }
-      alert(`DTE enviado. TrackID: ${j.trackid || "—"}`);
-    } catch (e: unknown) {
-  const msg = e instanceof Error ? e.message : String(e);
-  console.error("Emitir DTE falló:", msg);
-  alert(`Fallo al emitir: ${msg}`);
-}
-  }}
-  className="px-2 py-1 rounded border hover:bg-white"
->
-  Emitir DTE (SII Cert)
-</button>
+                      onClick={async () => {
+                        try {
+                          const r = await fetch("/api/dte/boleta", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ orderId: o.id, tipo: 39 }),
+                          });
+                          const txt = await r.text();
+                          const j = (() => {
+                            try {
+                              return JSON.parse(txt) as { trackid?: string; error?: string };
+                            } catch {
+                              return { error: txt };
+                            }
+                          })();
+                          if (!r.ok) {
+                            alert(`Error DTE: ${j.error ?? txt ?? r.status}`);
+                            return;
+                          }
+                          alert(`DTE enviado. TrackID: ${j.trackid || "—"}`);
+                        } catch (e: unknown) {
+                          const msg = e instanceof Error ? e.message : String(e);
+                          console.error("Emitir DTE falló:", msg);
+                          alert(`Fallo al emitir: ${msg}`);
+                        }
+                      }}
+                      className="px-2 py-1 rounded border hover:bg-white"
+                    >
+                      Emitir DTE (SII Cert)
+                    </button>
 
                     <a
                       href={`/api/dte/${o.id}/pdf`}
@@ -296,6 +324,17 @@ function Row(props: {
                     >
                       Descargar Boleta PDF
                     </a>
+                  </div>
+
+                  <div className="mt-2 flex items-center gap-2">
+                    <label className="text-sm inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(o.shipment?.delivered)}
+                        onChange={(e) => onDelivered(o.id, e.target.checked)}
+                      />
+                      Marcar entregado
+                    </label>
                   </div>
 
                   <div className="text-xs text-slate-500 mt-1">
