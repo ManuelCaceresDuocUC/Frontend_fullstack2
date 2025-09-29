@@ -218,7 +218,7 @@ function stripXmlDecl(s: string) {
 
 async function getTokenFromSeed(signedXml: string): Promise<string> {
   const inner = stripXmlDecl(signedXml);
-  // según WSDL: operación getToken y namespace https://palena.sii.cl/DTEWS/GetTokenFromSeed.jws
+
   const ns = (process.env.SII_ENV || "cert").toLowerCase() === "prod"
     ? "https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws"
     : "https://palena.sii.cl/DTEWS/GetTokenFromSeed.jws";
@@ -228,15 +228,19 @@ async function getTokenFromSeed(signedXml: string): Promise<string> {
   );
 
   const resp = await postSOAP(`/DTEWS/GetTokenFromSeed.jws`, env);
-  // la respuesta trae el XML codificado en getTokenReturn
-  const innerRet = resp.match(/<getTokenReturn[^>]*>([\s\S]*?)<\/getTokenReturn>/i);
-  if (!innerRet) throw new Error(`No <getTokenReturn> en respuesta. Head: ${resp.slice(0,400)}`);
 
-  const decoded = innerRet[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
-  const m = decoded.match(/<TOKEN>([^<]+)<\/TOKEN>/i);
-  if (!m) throw new Error(`No <TOKEN> en respuesta decodificada. Head: ${decoded.slice(0,200)}`);
-  return m[1].trim();
+  // acepta <getTokenReturn> con o sin prefijo (ns1:)
+  const mRet = resp.match(/<(?:\w+:)?getTokenReturn[^>]*>([\s\S]*?)<\/(?:\w+:)?getTokenReturn>/i);
+  if (!mRet) throw new Error(`No <getTokenReturn> en respuesta. Head: ${resp.slice(0,400)}`);
+
+  const decoded = mRet[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+
+  const mTok = decoded.match(/<TOKEN>([^<]+)<\/TOKEN>/i);
+  if (!mTok) throw new Error(`No <TOKEN> en respuesta decodificada. Head: ${decoded.slice(0,200)}`);
+
+  return mTok[1].trim();
 }
+
 
 
 
