@@ -184,10 +184,7 @@ export async function getSeed(): Promise<string> {
 
 
 function buildSeedXML(seed: string): string {
-  return `<?xml version="1.0" encoding="ISO-8859-1"?>
-<getToken xmlns="http://www.sii.cl/SiiDte">
-  <item><Semilla>${seed}</Semilla></item>
-</getToken>`;
+  return `<getToken xmlns="http://www.sii.cl/SiiDte"><item><Semilla>${seed}</Semilla></item></getToken>`;
 }
 
 // Firma del getToken (seed)
@@ -221,13 +218,24 @@ function stripXmlDecl(s: string) {
 
 async function getTokenFromSeed(signedXml: string): Promise<string> {
   const inner = stripXmlDecl(signedXml);
+  // según WSDL: operación getToken y namespace https://palena.sii.cl/DTEWS/GetTokenFromSeed.jws
+  const ns = (process.env.SII_ENV || "cert").toLowerCase() === "prod"
+    ? "https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws"
+    : "https://palena.sii.cl/DTEWS/GetTokenFromSeed.jws";
+
   const env = soapEnv(
-    `<m:getTokenFromSeed xmlns:m="http://DefaultNamespace">
-       <pszXml><![CDATA[${inner}]]></pszXml>
-     </m:getTokenFromSeed>`
+    `<m:getToken xmlns:m="${ns}"><pszXml><![CDATA[${inner}]]></pszXml></m:getToken>`
   );
+
   const resp = await postSOAP(`/DTEWS/GetTokenFromSeed.jws`, env);
-  return pick(resp, "TOKEN");
+  // la respuesta trae el XML codificado en getTokenReturn
+  const innerRet = resp.match(/<getTokenReturn[^>]*>([\s\S]*?)<\/getTokenReturn>/i);
+  if (!innerRet) throw new Error(`No <getTokenReturn> en respuesta. Head: ${resp.slice(0,400)}`);
+
+  const decoded = innerRet[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const m = decoded.match(/<TOKEN>([^<]+)<\/TOKEN>/i);
+  if (!m) throw new Error(`No <TOKEN> en respuesta decodificada. Head: ${decoded.slice(0,200)}`);
+  return m[1].trim();
 }
 
 
