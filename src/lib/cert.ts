@@ -1,12 +1,12 @@
 // src/lib/cert.ts
-// mTLS global para fetch + extracción de key/cert PEM desde .p12 para SII (Certificación)
+// mTLS LAZY para fetch + extracción de key/cert PEM desde .p12 (SII Certificación)
 
 import fs from "fs";
 import path from "path";
 import * as forge from "node-forge";
-import { Agent, setGlobalDispatcher } from "undici";
+import { Agent, setGlobalDispatcher, getGlobalDispatcher } from "undici";
 
-// ---- helpers env ----
+// --- helpers env ---
 function must(name: string): string {
   const v = process.env[name];
   if (!v || !v.trim()) throw new Error(`Falta variable de entorno ${name}`);
@@ -21,12 +21,12 @@ function loadP12Buffer(): Buffer {
   return fs.readFileSync(path.resolve(p));
 }
 
-// Buffer(Node) -> ByteBuffer(forge) usando Uint8Array (sin 'binary')
+// Buffer(Node) -> ByteBuffer(forge) (sin 'binary' string)
 function bufferToForge(buf: Buffer) {
   return forge.util.createBuffer(new Uint8Array(buf));
 }
 
-// Extrae { keyPem, certPem } desde .p12
+// Extrae { keyPem, certPem } desde .p12 (para firmar XML)
 export function loadP12PEM(): { keyPem: string; certPem: string } {
   const pass = must("SII_CERT_PASSWORD");
   const p12buf = loadP12Buffer();
@@ -39,10 +39,7 @@ export function loadP12PEM(): { keyPem: string; certPem: string } {
 
   for (const sc of p12.safeContents) {
     for (const sb of sc.safeBags) {
-      if (
-        sb.type === forge.pki.oids.pkcs8ShroudedKeyBag ||
-        sb.type === forge.pki.oids.keyBag
-      ) {
+      if (sb.type === forge.pki.oids.pkcs8ShroudedKeyBag || sb.type === forge.pki.oids.keyBag) {
         keyPem = forge.pki.privateKeyToPem(sb.key!);
       }
       if (sb.type === forge.pki.oids.certBag) {
@@ -55,12 +52,22 @@ export function loadP12PEM(): { keyPem: string; certPem: string } {
   return { keyPem, certPem };
 }
 
-// Configura mTLS GLOBAL para fetch en runtime Node (no Edge)
-const agent = new Agent({
-  connect: {
-    pfx: loadP12Buffer(),
-    passphrase: must("SII_CERT_PASSWORD"),
-    rejectUnauthorized: true,
-  },
-});
-setGlobalDispatcher(agent);
+// Configura mTLS GLOBAL de forma perezosa. Llamar dentro del handler.
+export function ensureMtlsDispatcher(): void {
+  // si ya hay dispatcher global, no tocar
+  try {
+    const existing = getGlobalDispatcher?.();
+    if (existing) return;
+  } catch {
+    // continúa y configura
+  }
+
+  const agent = new Agent({
+    connect: {
+      pfx: loadP12Buffer(),
+      passphrase: must("SII_CERT_PASSWORD"),
+      rejectUnauthorized: true,
+    },
+  });
+  setGlobalDispatcher(agent);
+}
