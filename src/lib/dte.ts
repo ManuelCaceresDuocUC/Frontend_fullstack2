@@ -147,8 +147,11 @@ const BASE = SII_ENV === "prod" ? "https://maullin.sii.cl" : "https://palena.sii
 
 const soapEnv = (inner: string) =>
   `<?xml version="1.0" encoding="ISO-8859-1"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body>${inner}</soapenv:Body></soapenv:Envelope>`;
-
+function hasClientCert() {
+  return !!process.env.SII_CERT_P12_B64 || !!process.env.SII_CERT_P12_PATH;
+}
 async function postSOAP(
+
   path: string,
   body: string,
   extraHeaders?: Readonly<Record<string, string>>,
@@ -162,6 +165,7 @@ async function postSOAP(
     "SOAPAction": "",
     ...(extraHeaders ?? {}),
   };
+if (hasClientCert()) ensureMtlsDispatcher();
 
   const res = await fetch(url, {
     method: "POST",
