@@ -42,23 +42,41 @@ function isBagWithCert(bag: forge.pkcs12.Bag): bag is BagWithCert {
 
 // attr localKeyId -> hex
 // attr localKeyId -> hex
+// attr localKeyId -> hex (soporta arreglo u objeto)
 function getLocalKeyIdHex(bag: forge.pkcs12.Bag): string | undefined {
-  const attrs = (bag as BagWithAttrs).attributes;
+  const attrs = (bag as unknown as { attributes?: unknown }).attributes;
   if (!attrs) return undefined;
 
-  const raw = (attrs.find((a: Pkcs12Attr) => a.name === "localKeyId")?.value);
-  if (!raw) return undefined;
+  let val: forge.util.ByteBuffer | undefined;
 
-  // Esperamos forge.util.ByteBuffer
-  if (typeof raw !== "object" || raw === null) return undefined;
-  const bb = raw as forge.util.ByteBuffer;
-  if (typeof bb.getBytes !== "function") return undefined;
+  // Caso 1: arreglo de attrs [{ name, value }]
+  if (Array.isArray(attrs)) {
+    type Attr = { name: string; value?: unknown };
+    const hit = (attrs as Attr[]).find((a: Attr) => a.name === "localKeyId");
+    if (hit && typeof hit.value === "object" && hit.value) {
+      val = hit.value as forge.util.ByteBuffer;
+    }
+  }
 
-  const bytes = bb.getBytes();
+  // Caso 2: objeto con propiedad localKeyId: [{ value }]
+  if (!val && typeof attrs === "object" && attrs !== null) {
+    const obj = attrs as { localKeyId?: Array<{ value?: unknown }> };
+    const first = obj.localKeyId?.[0]?.value;
+    if (first && typeof first === "object") {
+      val = first as forge.util.ByteBuffer;
+    }
+  }
+
+  if (!val || typeof val.getBytes !== "function") return undefined;
+
+  const bytes = val.getBytes();
   let hex = "";
-  for (let i = 0; i < bytes.length; i++) hex += ("0" + bytes.charCodeAt(i).toString(16)).slice(-2);
+  for (let i = 0; i < bytes.length; i++) {
+    hex += ("0" + bytes.charCodeAt(i).toString(16)).slice(-2);
+  }
   return hex;
 }
+
 
 
 // Extrae { keyPem, certPem } emparejados por localKeyId
