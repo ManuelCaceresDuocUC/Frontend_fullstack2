@@ -26,60 +26,42 @@ function bufferToForge(buf: Buffer): forge.util.ByteBuffer {
   return forge.util.createBuffer(new Uint8Array(buf));
 }
 
-// Tipos auxiliares para atributos sin depender de tipos inexistentes en @types/node-forge
+// Tipos auxiliares attrs
 type Pkcs12Attr = { name: string; value?: unknown };
-type BagWithAttrs = forge.pkcs12.Bag & { attributes?: Pkcs12Attr[] };
-type BagWithKey = forge.pkcs12.Bag & { key?: forge.pki.PrivateKey };
-type BagWithCert = forge.pkcs12.Bag & { cert?: forge.pki.Certificate };
+type BagAttrs = { attributes?: Pkcs12Attr[] | { localKeyId?: Array<{ value?: unknown }> } };
+type BagWithKey = forge.pkcs12.Bag & { key?: forge.pki.PrivateKey } & BagAttrs;
+type BagWithCert = forge.pkcs12.Bag & { cert?: forge.pki.Certificate } & BagAttrs;
 
-// type guards
 function isBagWithKey(bag: forge.pkcs12.Bag): bag is BagWithKey {
-  return Object.prototype.hasOwnProperty.call(bag, "key") && Boolean((bag as BagWithKey).key);
+  return Object.prototype.hasOwnProperty.call(bag, "key");
 }
 function isBagWithCert(bag: forge.pkcs12.Bag): bag is BagWithCert {
-  return Object.prototype.hasOwnProperty.call(bag, "cert") && Boolean((bag as BagWithCert).cert);
+  return Object.prototype.hasOwnProperty.call(bag, "cert");
 }
 
-// attr localKeyId -> hex
-// attr localKeyId -> hex
-// attr localKeyId -> hex (soporta arreglo u objeto)
+// localKeyId -> hex (soporta arreglo u objeto)
 function getLocalKeyIdHex(bag: forge.pkcs12.Bag): string | undefined {
-  const attrs = (bag as unknown as { attributes?: unknown }).attributes;
-  if (!attrs) return undefined;
+  const attrsRaw = (bag as BagAttrs).attributes;
+  if (!attrsRaw) return undefined;
 
-  let val: forge.util.ByteBuffer | undefined;
+  let bb: forge.util.ByteBuffer | undefined;
 
-  // Caso 1: arreglo de attrs [{ name, value }]
-  if (Array.isArray(attrs)) {
-    type Attr = { name: string; value?: unknown };
-    const hit = (attrs as Attr[]).find((a: Attr) => a.name === "localKeyId");
-    if (hit && typeof hit.value === "object" && hit.value) {
-      val = hit.value as forge.util.ByteBuffer;
-    }
+  if (Array.isArray(attrsRaw)) {
+    const hit = (attrsRaw as Pkcs12Attr[]).find((a: Pkcs12Attr) => a.name === "localKeyId");
+    if (hit && hit.value && typeof hit.value === "object") bb = hit.value as forge.util.ByteBuffer;
+  } else if (typeof attrsRaw === "object" && attrsRaw !== null) {
+    const first = (attrsRaw as { localKeyId?: Array<{ value?: unknown }> }).localKeyId?.[0]?.value;
+    if (first && typeof first === "object") bb = first as forge.util.ByteBuffer;
   }
+  if (!bb || typeof bb.getBytes !== "function") return undefined;
 
-  // Caso 2: objeto con propiedad localKeyId: [{ value }]
-  if (!val && typeof attrs === "object" && attrs !== null) {
-    const obj = attrs as { localKeyId?: Array<{ value?: unknown }> };
-    const first = obj.localKeyId?.[0]?.value;
-    if (first && typeof first === "object") {
-      val = first as forge.util.ByteBuffer;
-    }
-  }
-
-  if (!val || typeof val.getBytes !== "function") return undefined;
-
-  const bytes = val.getBytes();
+  const bytes = bb.getBytes();
   let hex = "";
-  for (let i = 0; i < bytes.length; i++) {
-    hex += ("0" + bytes.charCodeAt(i).toString(16)).slice(-2);
-  }
+  for (let i = 0; i < bytes.length; i++) hex += ("0" + bytes.charCodeAt(i).toString(16)).slice(-2);
   return hex;
 }
 
-
-
-// Extrae { keyPem, certPem } emparejados por localKeyId
+// Devuelve PEMs emparejados. Clave en PEM (PKCS#8 o RSA PKCS#1), ambos válidos para xml-crypto.
 export function loadP12PEM(): { keyPem: string; certPem: string } {
   const pass = must("SII_CERT_PASSWORD");
   const p12buf = loadP12Buffer();
@@ -95,10 +77,12 @@ export function loadP12PEM(): { keyPem: string; certPem: string } {
       const id = getLocalKeyIdHex(bag);
 
       if (isBagWithKey(bag) && bag.key) {
-        keys.push({ pem: forge.pki.privateKeyToPem(bag.key), id });
+        const pk = bag.key;
+        const pem = forge.pki.privateKeyToPem(pk).trim(); // "-----BEGIN PRIVATE KEY-----"
+        keys.push({ pem, id });
       }
       if (isBagWithCert(bag) && bag.cert) {
-        certs.push({ pem: forge.pki.certificateToPem(bag.cert), id });
+        certs.push({ pem: forge.pki.certificateToPem(bag.cert).trim(), id });
       }
     }
   }
@@ -106,36 +90,34 @@ export function loadP12PEM(): { keyPem: string; certPem: string } {
   let keyPem = "";
   let certPem = "";
 
-  // empareja por localKeyId
+  // Empareja por localKeyId
   for (const c of certs) {
-    const k = keys.find(kk => c.id && kk.id && kk.id === c.id);
+    const k = keys.find((kk) => c.id && kk.id && kk.id === c.id);
     if (k) { keyPem = k.pem; certPem = c.pem; break; }
   }
-  // fallback
   if (!keyPem && keys.length) keyPem = keys[0].pem;
   if (!certPem && certs.length) certPem = certs[0].pem;
 
   if (!keyPem) throw new Error("No se encontró la clave privada en el .p12");
   if (!certPem) throw new Error("No se encontró el certificado en el .p12");
 
-  if (!/^-----BEGIN (RSA )?PRIVATE KEY-----/.test(keyPem.trim())) {
-    throw new Error("Clave privada en formato no soportado");
+  // Validaciones mínimas
+  if (!/^-----BEGIN (?:RSA )?PRIVATE KEY-----/.test(keyPem)) {
+    throw new Error("Clave privada PEM inválida");
   }
-  if (!/^-----BEGIN CERTIFICATE-----/.test(certPem.trim())) {
-    throw new Error("Certificado en formato PEM inválido");
+  if (!/^-----BEGIN CERTIFICATE-----/.test(certPem)) {
+    throw new Error("Certificado PEM inválido");
   }
 
-  return { keyPem: keyPem.trim(), certPem: certPem.trim() };
+  return { keyPem, certPem };
 }
 
-// Configura mTLS GLOBAL de forma perezosa. Llamar dentro del handler.
+// mTLS global para fetch (llamar dentro del handler)
 export function ensureMtlsDispatcher(): void {
   try {
     const existing = getGlobalDispatcher?.();
     if (existing) return;
-  } catch {
-    /* noop */
-  }
+  } catch { /* noop */ }
 
   const agent = new Agent({
     connect: {
