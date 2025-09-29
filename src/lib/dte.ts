@@ -127,15 +127,24 @@ const soapEnv = (inner: string) =>
   `<?xml version="1.0" encoding="ISO-8859-1"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body>${inner}</soapenv:Body></soapenv:Envelope>`;
 
 async function postSOAP(path: string, body: string): Promise<string> {
-  const r = await fetch(`${BASE}${path}`, {
+  const url = `${BASE}${path}`;
+  const r = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "text/xml; charset=ISO-8859-1", SOAPAction: "" },
+    headers: {
+      "Content-Type": "text/xml; charset=ISO-8859-1",
+      "Accept": "text/xml,application/xml,text/plain",
+      "SOAPAction": "",
+    },
     body,
   });
+
   const txt = await r.text();
-  if (!r.ok) throw new Error(`SOAP ${path} ${r.status}: ${txt}`);
+  console.error("[SII SOAP]", path, "status:", r.status, "len:", txt.length, "head:", txt.slice(0, 200));
+
+  if (!r.ok) throw new Error(`SOAP ${path} ${r.status}: ${txt.slice(0, 400)}`);
   return txt;
 }
+
 const pick = (xml: string, tag: string): string => {
   const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
   if (!m) throw new Error(`No <${tag}> en respuesta`);
@@ -147,7 +156,9 @@ const pick = (xml: string, tag: string): string => {
 export async function getSeed(): Promise<string> {
   const env = soapEnv(`<getSeed/>`);
   const resp = await postSOAP(`/DTEWS/CrSeed.jws`, env);
-  return pick(resp, "SEMILLA");
+  const m = resp.match(/<SEMILLA>([^<]+)<\/SEMILLA>/i);
+  if (!m) throw new Error(`No <SEMILLA> en respuesta. Head: ${resp.slice(0, 400)}`);
+  return m[1].trim();
 }
 
 function buildSeedXML(seed: string): string {
@@ -162,12 +173,12 @@ function signXmlEnveloped(xml: string): string {
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
 
   const sig = new SignedXml();
-const sigL = sig as LegacySignedXml;
-sigL.signingKey = keyPem;
-sigL.keyInfoProvider = {
-  getKeyInfo: () =>
-    `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
-};
+  const sigL = sig as LegacySignedXml;
+  sigL.signingKey = keyPem;
+  sigL.keyInfoProvider = {
+    getKeyInfo: () =>
+      `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+  };
 
   sig.addReference({
     xpath: "//*[local-name(.)='getToken']",
@@ -181,6 +192,7 @@ sigL.keyInfoProvider = {
   sig.computeSignature(xml);
   return sig.getSignedXml();
 }
+
 async function getTokenFromSeed(signedXml: string): Promise<string> {
   const env = soapEnv(`<getTokenFromSeed><pszXml>${signedXml}</pszXml></getTokenFromSeed>`);
   const resp = await postSOAP(`/DTEWS/GetTokenFromSeed.jws`, env);
@@ -188,8 +200,10 @@ async function getTokenFromSeed(signedXml: string): Promise<string> {
 }
 
 export async function getToken(): Promise<string> {
-  const hasCert = !!process.env.SII_CERT_P12_B64 && !!process.env.SII_CERT_PASSWORD;
-  if (!hasCert) return "TOKEN_FAKE_CERT";
+  const hasCert = !!process.env.SII_CERT_P12_B64 || !!process.env.SII_CERT_P12_PATH;
+  const hasPass = !!process.env.SII_CERT_PASSWORD;
+  if (!hasCert || !hasPass) return "TOKEN_FAKE_CERT";
+
   const seed = await getSeed();
   const seedXml = buildSeedXML(seed);
   const signed = signXmlEnveloped(seedXml);
@@ -223,12 +237,12 @@ function signSobreXML(xmlSobre: string): string {
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
 
   const sig = new SignedXml();
-const sigL = sig as LegacySignedXml;
-sigL.signingKey = keyPem;
-sigL.keyInfoProvider = {
-  getKeyInfo: () =>
-    `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
-};
+  const sigL = sig as LegacySignedXml;
+  sigL.signingKey = keyPem;
+  sigL.keyInfoProvider = {
+    getKeyInfo: () =>
+      `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+  };
 
   sig.addReference({
     xpath: "/*[local-name(.)='EnvioDTE']",
@@ -251,18 +265,19 @@ export async function sendEnvioDTE(xmlDte: string, token: string) {
     `<upload><fileName>SetDTE.xml</fileName><contentFile><![CDATA[${firmado}]]></contentFile></upload>`
   );
 
-  // Enviar con TOKEN en Cookie
   const r = await fetch(`${BASE}/DTEWS/EnvioDTE.jws`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "text/xml; charset=ISO-8859-1",
-    "SOAPAction": "",
-    "Cookie": `TOKEN=${token}`,
-  },
-  body: env,
-});
+    method: "POST",
+    headers: {
+      "Content-Type": "text/xml; charset=ISO-8859-1",
+      "Accept": "text/xml,application/xml,text/plain",
+      "SOAPAction": "",
+      "Cookie": `TOKEN=${token}`,
+    },
+    body: env,
+  });
   const txt = await r.text();
-  if (!r.ok) throw new Error(`SOAP EnvioDTE ${r.status}: ${txt}`);
+  console.error("[SII SOAP] /EnvioDTE status:", r.status, "len:", txt.length, "head:", txt.slice(0, 200));
+  if (!r.ok) throw new Error(`SOAP EnvioDTE ${r.status}: ${txt.slice(0, 400)}`);
   const trackid = pick(txt, "TRACKID");
   return { trackid };
 }
