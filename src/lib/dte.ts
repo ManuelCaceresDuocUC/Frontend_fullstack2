@@ -136,7 +136,6 @@ async function postSOAP(path: string, body: string): Promise<string> {
   if (!r.ok) throw new Error(`SOAP ${path} ${r.status}: ${txt}`);
   return txt;
 }
-
 const pick = (xml: string, tag: string): string => {
   const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
   if (!m) throw new Error(`No <${tag}> en respuesta`);
@@ -254,14 +253,14 @@ export async function sendEnvioDTE(xmlDte: string, token: string) {
 
   // Enviar con TOKEN en Cookie
   const r = await fetch(`${BASE}/DTEWS/EnvioDTE.jws`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/xml; charset=ISO-8859-1",
-      "SOAPAction": "",
-      "Cookie": `TOKEN=${token}`,
-    },
-    body: env,
-  });
+  method: "POST",
+  headers: {
+    "Content-Type": "text/xml; charset=ISO-8859-1",
+    "SOAPAction": "",
+    "Cookie": `TOKEN=${token}`,
+  },
+  body: env,
+});
   const txt = await r.text();
   if (!r.ok) throw new Error(`SOAP EnvioDTE ${r.status}: ${txt}`);
   const trackid = pick(txt, "TRACKID");
