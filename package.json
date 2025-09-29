@@ -36,7 +36,7 @@
     "swr": "^2.3.6",
     "transbank-sdk": "^6.1.0",
     "undici": "^7.16.0",
-    "xml-crypto": "^6.1.2",
+    "xml-crypto": "6.1.1",
     "xmlbuilder2": "^3.1.1",
     "zustand": "^5.0.8"
   },
