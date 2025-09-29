@@ -226,13 +226,12 @@ function signXmlEnveloped(xml: string): string {
   const { key, certPem } = loadP12KeyAndCert();
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
   const sig = new SignedXml({
-  idAttribute: "ID",  // v6 respeta esto
-  canonicalizationAlgorithm: "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
-  signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
-});
+    idAttribute: "Id", // antes "ID"
+    canonicalizationAlgorithm: "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+    signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
+  });
   withKey(sig, certB64, key);
   addRefById(sig, "GT");
-  
   sig.computeSignature(xml);
   return sig.getSignedXml();
 }
