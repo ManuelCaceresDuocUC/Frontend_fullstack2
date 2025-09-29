@@ -163,25 +163,20 @@ const pick = (xml: string, tag: string): string => {
 
 /** ============ Seed + Token ============ */
 
+// 1) Decodifica getSeedReturn escapado
 export async function getSeed(): Promise<string> {
   const env = soapEnv(`<getSeed/>`);
   const resp = await postSOAP(`/DTEWS/CrSeed.jws`, env);
 
-  // Paso 1: sacar el contenido de <getSeedReturn>
   const inner = resp.match(/<getSeedReturn[^>]*>([\s\S]*?)<\/getSeedReturn>/i);
   if (!inner) throw new Error(`No <getSeedReturn> en respuesta. Head: ${resp.slice(0,400)}`);
 
-  // Paso 2: des-escapar entidades XML (&lt;...&gt;)
-  const decoded = inner[1]
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
-
-  // Paso 3: buscar la semilla real
+  const decoded = inner[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
   const m = decoded.match(/<SEMILLA>([^<]+)<\/SEMILLA>/i);
   if (!m) throw new Error(`No <SEMILLA> en respuesta decodificada. Head: ${decoded.slice(0,200)}`);
   return m[1].trim();
 }
+
 
 function buildSeedXML(seed: string): string {
   return `<?xml version="1.0" encoding="ISO-8859-1"?>
@@ -196,13 +191,11 @@ function signXmlEnveloped(xml: string): string {
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
 
   const sig = new SignedXml({
-    canonicalizationAlgorithm:
-      "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+    canonicalizationAlgorithm: "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
     signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
   });
 
   withKey(sig, certB64, keyPem);
-
   sig.addReference({
     xpath: "//*[local-name(.)='getToken']",
     transforms: [
@@ -215,7 +208,6 @@ function signXmlEnveloped(xml: string): string {
   sig.computeSignature(xml);
   return sig.getSignedXml();
 }
-
 
 async function getTokenFromSeed(signedXml: string): Promise<string> {
   const env = soapEnv(`<getTokenFromSeed><pszXml>${signedXml}</pszXml></getTokenFromSeed>`);
@@ -262,13 +254,11 @@ function signSobreXML(xmlSobre: string): string {
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
 
   const sig = new SignedXml({
-    canonicalizationAlgorithm:
-      "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+    canonicalizationAlgorithm: "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
     signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
   });
 
   withKey(sig, certB64, keyPem);
-
   sig.addReference({
     xpath: "/*[local-name(.)='EnvioDTE']",
     transforms: [
@@ -281,7 +271,6 @@ function signSobreXML(xmlSobre: string): string {
   sig.computeSignature(xmlSobre);
   return sig.getSignedXml();
 }
-
 
 export async function sendEnvioDTE(xmlDte: string, token: string) {
   const sobre = buildSobreEnvio(xmlDte);
