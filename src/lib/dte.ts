@@ -20,7 +20,17 @@ type LegacySignedXml = SignedXml & {
   signingKey: string | Buffer;
   keyInfoProvider: { getKeyInfo: () => string };
 };
-
+function withKey(sig: SignedXml, certB64: string, keyPem: string) {
+  const sx = sig as unknown as {
+    signingKey: string | Buffer;
+    keyInfoProvider: { getKeyInfo: () => string };
+  };
+  sx.signingKey = keyPem;
+  sx.keyInfoProvider = {
+    getKeyInfo: () =>
+      `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+  };
+}
 export function loadCAF(tipo: 39 | 41): Caf {
   const b64 = tipo === 39 ? process.env.CAF_39_B64 : process.env.CAF_41_B64;
   let xml: string | undefined;
@@ -180,17 +190,18 @@ function buildSeedXML(seed: string): string {
 </getToken>`;
 }
 
+// Firma del getToken (seed)
 function signXmlEnveloped(xml: string): string {
   const { keyPem, certPem } = loadP12PEM();
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
 
-  const sig = new SignedXml();
-  const sigL = sig as LegacySignedXml;
-  sigL.signingKey = keyPem;
-  sigL.keyInfoProvider = {
-    getKeyInfo: () =>
-      `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
-  };
+  const sig = new SignedXml({
+    canonicalizationAlgorithm:
+      "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+    signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
+  });
+
+  withKey(sig, certB64, keyPem);
 
   sig.addReference({
     xpath: "//*[local-name(.)='getToken']",
@@ -204,6 +215,7 @@ function signXmlEnveloped(xml: string): string {
   sig.computeSignature(xml);
   return sig.getSignedXml();
 }
+
 
 async function getTokenFromSeed(signedXml: string): Promise<string> {
   const env = soapEnv(`<getTokenFromSeed><pszXml>${signedXml}</pszXml></getTokenFromSeed>`);
@@ -244,17 +256,18 @@ function buildSobreEnvio(dteXml: string): string {
 </EnvioDTE>`;
 }
 
+// Firma del Sobre EnvioDTE
 function signSobreXML(xmlSobre: string): string {
   const { keyPem, certPem } = loadP12PEM();
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
 
-  const sig = new SignedXml();
-  const sigL = sig as LegacySignedXml;
-  sigL.signingKey = keyPem;
-  sigL.keyInfoProvider = {
-    getKeyInfo: () =>
-      `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
-  };
+  const sig = new SignedXml({
+    canonicalizationAlgorithm:
+      "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+    signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
+  });
+
+  withKey(sig, certB64, keyPem);
 
   sig.addReference({
     xpath: "/*[local-name(.)='EnvioDTE']",
@@ -268,6 +281,7 @@ function signSobreXML(xmlSobre: string): string {
   sig.computeSignature(xmlSobre);
   return sig.getSignedXml();
 }
+
 
 export async function sendEnvioDTE(xmlDte: string, token: string) {
   const sobre = buildSobreEnvio(xmlDte);
