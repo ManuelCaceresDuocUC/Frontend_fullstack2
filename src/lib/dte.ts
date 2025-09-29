@@ -197,8 +197,7 @@ export async function getSeed(): Promise<string> {
 }
 
 function buildSeedXML(seed: string): string {
-  // ambos atributos para que getElementById lo encuentre en cualquier variante
-  return `<getToken xmlns="http://www.sii.cl/SiiDte" ID="GT" Id="GT">
+  return `<getToken ID="GT" Id="GT">
     <item><Semilla>${seed}</Semilla></item>
   </getToken>`;
 }
@@ -226,7 +225,7 @@ function signXmlEnveloped(xml: string): string {
   const { key, certPem } = loadP12KeyAndCert();
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
   const sig = new SignedXml({
-    idAttribute: "Id", // antes "ID"
+    idAttribute: "Id",
     canonicalizationAlgorithm: "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
     signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
   });
