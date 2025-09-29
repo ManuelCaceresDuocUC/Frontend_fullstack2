@@ -18,16 +18,8 @@ type Caf = {
   xml: string;
 };
 
-type AddRefV6 = (opts: {
-  uri: string;
-  transforms: string[];
-  digestAlgorithm: string;
-}) => void;
-type AddRefV1 = (
-  xpath: string,
-  transforms: string[],
-  digestAlgorithm: string
-) => void;
+type AddRefV6Args = [{ uri: string; transforms: string[]; digestAlgorithm: string }];
+type AddRefV1Args = [string, string[], string];
 
 function withKey(sig: SignedXml, certB64: string, key: import("crypto").KeyObject) {
   const target = sig as unknown as {
@@ -209,7 +201,6 @@ type AddRefOpts = {
   digestAlgorithm: string;
 };
 function addRefById(sig: SignedXml, id: string) {
-  // habilita búsqueda por atributos de ID
   (sig as unknown as { idAttributes?: string[] }).idAttributes = ["ID", "Id"];
 
   const transforms = [
@@ -218,21 +209,20 @@ function addRefById(sig: SignedXml, id: string) {
   ];
   const digest = "http://www.w3.org/2000/09/xmldsig#sha1";
 
-  const addRef = (sig as unknown as { addReference: unknown }).addReference as
-    | AddRefV6
-    | AddRefV1;
+  const addRefUnknown = (sig as unknown as { addReference: unknown }).addReference;
+  if (typeof addRefUnknown !== "function") {
+    throw new Error("xml-crypto: addReference no disponible");
+  }
 
-  // detecta firma por número de parámetros
-  if ((addRef as AddRefV6).length === 1) {
-    // xml-crypto 6.x
-    (addRef as AddRefV6)({
-      uri: `#${id}`,
-      transforms,
-      digestAlgorithm: digest,
-    });
+  const addRef = addRefUnknown as (...args: unknown[]) => unknown;
+
+  // Detecta API por aridad pero preserva el this con .call(sig, …)
+  if (addRef.length === 1) {
+    const args: AddRefV6Args = [{ uri: `#${id}`, transforms, digestAlgorithm: digest }];
+    addRef.call(sig, ...args);
   } else {
-    // xml-crypto 1.x (usa XPath simple y válido)
-    (addRef as AddRefV1)(`//*[@ID='${id}']`, transforms, digest);
+    const args: AddRefV1Args = [`//*[@ID='${id}']`, transforms, digest];
+    addRef.call(sig, ...args);
   }
 }
 
