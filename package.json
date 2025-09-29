@@ -17,6 +17,7 @@
     "@aws-sdk/client-s3": "^3.883.0",
     "@aws-sdk/s3-request-presigner": "^3.883.0",
     "@prisma/client": "^6.16.2",
+    "@xmldom/xmldom": "^0.8.11",
     "axios": "^1.12.2",
     "bwip-js": "^4.7.0",
     "framer-motion": "^12.23.12",
@@ -37,7 +38,6 @@
     "undici": "^7.16.0",
     "xml-crypto": "^6.1.2",
     "xmlbuilder2": "^3.1.1",
-    "xmldsigjs": "^2.7.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

@@ -18,8 +18,6 @@ type Caf = {
   xml: string;
 };
 
-type AddRefV6Args = [{ uri: string; transforms: string[]; digestAlgorithm: string }];
-type AddRefV1Args = [string, string[], string];
 
 function withKey(sig: SignedXml, certB64: string, key: import("crypto").KeyObject) {
   const target = sig as unknown as {
@@ -191,51 +189,42 @@ export async function getSeed(): Promise<string> {
 }
 
 function buildSeedXML(seed: string): string {
-  return `<getToken xmlns="http://www.sii.cl/SiiDte" ID="GT"><item><Semilla>${seed}</Semilla></item></getToken>`;
+  // ambos atributos para que getElementById lo encuentre en cualquier variante
+  return `<getToken xmlns="http://www.sii.cl/SiiDte" ID="GT" Id="GT">
+    <item><Semilla>${seed}</Semilla></item>
+  </getToken>`;
 }
 
 // helper sin "any" para addReference por URI
-type AddRefOpts = {
-  uri: string;
-  transforms: string[];
-  digestAlgorithm: string;
-};
-function addRefById(sig: SignedXml, id: string) {
-  (sig as unknown as { idAttributes?: string[] }).idAttributes = ["ID", "Id"];
-
-  const transforms = [
-    "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
-    "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
-  ];
-  const digest = "http://www.w3.org/2000/09/xmldsig#sha1";
-
-  const addRefUnknown = (sig as unknown as { addReference: unknown }).addReference;
-  if (typeof addRefUnknown !== "function") {
-    throw new Error("xml-crypto: addReference no disponible");
+function getAddRefArity(sig: SignedXml): number {
+  const maybe = (sig as unknown as { addReference?: unknown }).addReference;
+  if (typeof maybe === "function") {
+    const fn = maybe as { length: number };
+    return fn.length;
   }
-
-  const addRef = addRefUnknown as (...args: unknown[]) => unknown;
-
-  // Detecta API por aridad pero preserva el this con .call(sig, …)
-  if (addRef.length === 1) {
-    const args: AddRefV6Args = [{ uri: `#${id}`, transforms, digestAlgorithm: digest }];
-    addRef.call(sig, ...args);
-  } else {
-    const args: AddRefV1Args = [`//*[@ID='${id}']`, transforms, digest];
-    addRef.call(sig, ...args);
-  }
+  return -1;
 }
-
+function addRefById(sig: SignedXml, id: string) {
+  sig.addReference({
+    uri: `#${id}`,
+    transforms: [
+      "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
+      "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+    ],
+    digestAlgorithm: "http://www.w3.org/2000/09/xmldsig#sha1",
+  });
+}
 function signXmlEnveloped(xml: string): string {
   const { key, certPem } = loadP12KeyAndCert();
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
   const sig = new SignedXml({
-    idAttribute: "ID",
-    canonicalizationAlgorithm: "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
-    signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
-  });
+  idAttribute: "ID",  // v6 respeta esto
+  canonicalizationAlgorithm: "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+  signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
+});
   withKey(sig, certB64, key);
   addRefById(sig, "GT");
+  
   sig.computeSignature(xml);
   return sig.getSignedXml();
 }
@@ -286,8 +275,8 @@ export async function getToken(): Promise<string> {
 function buildSobreEnvio(dteXml: string): string {
   const now = new Date().toISOString().slice(0, 19);
   return `<?xml version="1.0" encoding="ISO-8859-1"?>
-<EnvioDTE xmlns="http://www.sii.cl/SiiDte" version="1.0" ID="ENV">
-  <SetDTE ID="SetDoc">
+<EnvioDTE xmlns="http://www.sii.cl/SiiDte" version="1.0" ID="ENV" Id="ENV">
+  <SetDTE ID="SetDoc" Id="SetDoc">
     <Caratula version="1.0">
       <RutEmisor>${process.env.BILLING_RUT}</RutEmisor>
       <RutEnvia>${process.env.BILLING_RUT}</RutEnvia>
@@ -312,6 +301,8 @@ function signSobreXML(xmlSobre: string): string {
   });
   withKey(sig, certB64, key);
   addRefById(sig, "ENV");
+console.log("arity", getAddRefArity(sig));
+
   sig.computeSignature(xmlSobre);
   return sig.getSignedXml();
 }
