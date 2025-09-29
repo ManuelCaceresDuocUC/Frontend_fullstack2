@@ -4,7 +4,7 @@ import path from "node:path";
 import { create } from "xmlbuilder2";
 import { SignedXml } from "xml-crypto";
 import { loadP12PEM } from "./cert";
-
+import { loadP12KeyAndCert } from "./cert"; 
 /** ==================== CAF & Cert ===================== */
 
 type Caf = {
@@ -20,12 +20,12 @@ type LegacySignedXml = SignedXml & {
   signingKey: string | Buffer;
   keyInfoProvider: { getKeyInfo: () => string };
 };
-function withKey(sig: SignedXml, certB64: string, keyPem: string) {
+function withKey(sig: SignedXml, certB64: string, signingKey: import("crypto").KeyObject) {
   const sx = sig as unknown as {
-    signingKey: string | Buffer;
+    signingKey: import("crypto").KeyObject;
     keyInfoProvider: { getKeyInfo: () => string };
   };
-  sx.signingKey = keyPem;
+  sx.signingKey = signingKey; // << KeyObject, no string
   sx.keyInfoProvider = {
     getKeyInfo: () =>
       `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
@@ -186,8 +186,9 @@ function buildSeedXML(seed: string): string {
 }
 
 // Firma del getToken (seed)
+// firma seed
 function signXmlEnveloped(xml: string): string {
-  const { keyPem, certPem } = loadP12PEM();
+  const { key, certPem } = loadP12KeyAndCert();
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
 
   const sig = new SignedXml({
@@ -195,7 +196,7 @@ function signXmlEnveloped(xml: string): string {
     signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
   });
 
-  withKey(sig, certB64, keyPem);
+  withKey(sig, certB64, key);
   sig.addReference({
     xpath: "//*[local-name(.)='getToken']",
     transforms: [
@@ -208,6 +209,7 @@ function signXmlEnveloped(xml: string): string {
   sig.computeSignature(xml);
   return sig.getSignedXml();
 }
+
 
 async function getTokenFromSeed(signedXml: string): Promise<string> {
   const env = soapEnv(`<getTokenFromSeed><pszXml>${signedXml}</pszXml></getTokenFromSeed>`);
@@ -249,8 +251,9 @@ function buildSobreEnvio(dteXml: string): string {
 }
 
 // Firma del Sobre EnvioDTE
+// firma sobre EnvioDTE
 function signSobreXML(xmlSobre: string): string {
-  const { keyPem, certPem } = loadP12PEM();
+  const { key, certPem } = loadP12KeyAndCert();
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
 
   const sig = new SignedXml({
@@ -258,7 +261,7 @@ function signSobreXML(xmlSobre: string): string {
     signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
   });
 
-  withKey(sig, certB64, keyPem);
+  withKey(sig, certB64, key);
   sig.addReference({
     xpath: "/*[local-name(.)='EnvioDTE']",
     transforms: [
@@ -271,6 +274,7 @@ function signSobreXML(xmlSobre: string): string {
   sig.computeSignature(xmlSobre);
   return sig.getSignedXml();
 }
+
 
 export async function sendEnvioDTE(xmlDte: string, token: string) {
   const sobre = buildSobreEnvio(xmlDte);

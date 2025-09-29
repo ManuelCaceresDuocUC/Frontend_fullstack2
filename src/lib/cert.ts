@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import * as forge from "node-forge";
 import { Agent, setGlobalDispatcher, getGlobalDispatcher } from "undici";
+import { createPrivateKey, KeyObject } from "crypto";
 
 // --- helpers env ---
 function must(name: string): string {
@@ -12,7 +13,12 @@ function must(name: string): string {
   if (!v || !v.trim()) throw new Error(`Falta variable de entorno ${name}`);
   return v.trim();
 }
-
+export function loadP12KeyAndCert(): { key: KeyObject; keyPem: string; certPem: string } {
+  const { keyPem, certPem } = loadP12PEM();          // tu función actual
+  // crea KeyObject; autodetecta PKCS#1 o PKCS#8
+  const key = createPrivateKey({ key: keyPem });      // sin passphrase
+  return { key, keyPem, certPem };
+}
 // .p12 desde B64 o PATH
 function loadP12Buffer(): Buffer {
   const b64 = process.env.SII_CERT_P12_B64?.trim();
