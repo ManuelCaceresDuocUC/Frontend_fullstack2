@@ -154,7 +154,7 @@ async function postSOAP(path: string, body: string): Promise<string> {
       "Accept": "text/xml,application/xml,text/plain",
       "SOAPAction": "",
     },
-    body: Buffer.from(body, "latin1"),
+body: Buffer.from(body, "latin1"),
   });
 
   const txt = await res.text();
@@ -189,7 +189,10 @@ export async function getSeed(): Promise<string> {
 
 
 function buildSeedXML(seed: string): string {
-  return `<getToken xmlns="http://www.sii.cl/SiiDte"><item><Semilla>${seed}</Semilla></item></getToken>`;
+  // con namespace oficial + atributo ID
+  return `<getToken xmlns="http://www.sii.cl/SiiDte" ID="GT">
+    <item><Semilla>${seed}</Semilla></item>
+  </getToken>`;
 }
 
 // Firma del getToken (seed)
@@ -199,13 +202,15 @@ function signXmlEnveloped(xml: string): string {
   const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
 
   const sig = new SignedXml({
+    idAttribute: "ID",
     canonicalizationAlgorithm: "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
     signatureAlgorithm: "http://www.w3.org/2000/09/xmldsig#rsa-sha1",
   });
 
   withKey(sig, certB64, key);
+
   sig.addReference({
-    xpath: "//*[local-name(.)='getToken']",
+    uri: "#GT", // <- firma exactamente el <getToken ID="GT">
     transforms: [
       "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
       "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
@@ -217,18 +222,22 @@ function signXmlEnveloped(xml: string): string {
   return sig.getSignedXml();
 }
 
+
 function stripXmlDecl(s: string) {
   return s.replace(/^\s*<\?xml[^?]*\?>\s*/i, "");
 }
 
 async function getTokenFromSeed(signedXml: string): Promise<string> {
   const inner = stripXmlDecl(signedXml);
+
   const ns = (process.env.SII_ENV || "cert").toLowerCase() === "prod"
     ? "https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws"
     : "https://palena.sii.cl/DTEWS/GetTokenFromSeed.jws";
 
   const env = soapEnv(
-    `<m:getToken xmlns:m="${ns}"><pszXml><![CDATA[${inner}]]></pszXml></m:getToken>`
+    `<m:getToken xmlns:m="${ns}">
+       <pszXml><![CDATA[${inner}]]></pszXml>
+     </m:getToken>`
   );
 
   const resp = await postSOAP(`/DTEWS/GetTokenFromSeed.jws`, env);
@@ -237,10 +246,12 @@ async function getTokenFromSeed(signedXml: string): Promise<string> {
   if (!mRet) throw new Error(`No <getTokenReturn> en respuesta. Head: ${resp.slice(0,400)}`);
 
   const decoded = mRet[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+
   const mTok = decoded.match(/<TOKEN>([^<]+)<\/TOKEN>/i);
   if (!mTok) throw new Error(`No <TOKEN> en respuesta decodificada. Head: ${decoded.slice(0,200)}`);
   return mTok[1].trim();
 }
+
 
 
 
