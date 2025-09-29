@@ -2,6 +2,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { create } from "xmlbuilder2";
+import { SignedXml } from "xml-crypto";
+import { loadP12PEM } from "./cert";
 
 /** ==================== CAF & Cert ===================== */
 
@@ -14,8 +16,11 @@ type Caf = {
   razon: string;
   xml: string;
 };
+type LegacySignedXml = SignedXml & {
+  signingKey: string | Buffer;
+  keyInfoProvider: { getKeyInfo: () => string };
+};
 
-// Lee CAF desde env B64; si no existe, desde PATH (solo local/dev).
 export function loadCAF(tipo: 39 | 41): Caf {
   const b64 = tipo === 39 ? process.env.CAF_39_B64 : process.env.CAF_41_B64;
   let xml: string | undefined;
@@ -28,7 +33,6 @@ export function loadCAF(tipo: 39 | 41): Caf {
     xml = fs.readFileSync(path.resolve(p), "utf8");
   }
 
-  // parseo simple
   const folioIni = Number(xml.match(/<DA>[\s\S]*?<RNG>[\s\S]*?<D>(\d+)<\/D>/)![1]);
   const folioFin = Number(xml.match(/<DA>[\s\S]*?<RNG>[\s\S]*?<H>(\d+)<\/H>/)![1]);
   const rsask = xml.match(/<RSASK>([\s\S]*?)<\/RSASK>/)![1].trim();
@@ -44,7 +48,6 @@ export function pickFolio(tipo: 39 | 41, used: number[]): number {
   throw new Error("No quedan folios en CAF");
 }
 
-// Certificado PFX para firma (B64 primero; si no, PATH local)
 export function loadCertPfx(): Buffer {
   const b64 = process.env.SII_CERT_P12_B64;
   if (b64 && b64.trim()) return Buffer.from(b64, "base64");
@@ -115,109 +118,152 @@ export function buildDTE({
   return { xml, neto, iva, total };
 }
 
-/** ==================== SOAP SII (esqueleto) ===================== */
-// URLs de certificación
-const SII_CERT = {
-  CR_SEED: "https://maullin.sii.cl/DTEWS/CrSeed.jws",
-  GET_TOKEN: "https://maullin.sii.cl/DTEWS/GetTokenFromSeed.jws",
-  ENVIO_DTE: "https://maullin.sii.cl/DTEWS/EnvioDTE.jws",
+/** ==================== SOAP SII ===================== */
+
+const SII_ENV = (process.env.SII_ENV || "cert").toLowerCase();
+const BASE = SII_ENV === "prod" ? "https://maullin.sii.cl" : "https://palena.sii.cl";
+
+const soapEnv = (inner: string) =>
+  `<?xml version="1.0" encoding="ISO-8859-1"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body>${inner}</soapenv:Body></soapenv:Envelope>`;
+
+async function postSOAP(path: string, body: string): Promise<string> {
+  const r = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "text/xml; charset=ISO-8859-1", SOAPAction: "" },
+    body,
+  });
+  const txt = await r.text();
+  if (!r.ok) throw new Error(`SOAP ${path} ${r.status}: ${txt}`);
+  return txt;
+}
+
+const pick = (xml: string, tag: string): string => {
+  const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
+  if (!m) throw new Error(`No <${tag}> en respuesta`);
+  return m[1].trim();
 };
 
-// POST SOAP simple
-async function soapPost(url: string, soapAction: string, bodyXml: string) {
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/xml; charset=ISO-8859-1",
-      SOAPAction: soapAction,
-    },
-    body: bodyXml,
+/** ============ Seed + Token ============ */
+
+export async function getSeed(): Promise<string> {
+  const env = soapEnv(`<getSeed/>`);
+  const resp = await postSOAP(`/DTEWS/CrSeed.jws`, env);
+  return pick(resp, "SEMILLA");
+}
+
+function buildSeedXML(seed: string): string {
+  return `<?xml version="1.0" encoding="ISO-8859-1"?>
+<getToken xmlns="http://www.sii.cl/SiiDte">
+  <item><Semilla>${seed}</Semilla></item>
+</getToken>`;
+}
+
+function signXmlEnveloped(xml: string): string {
+  const { keyPem, certPem } = loadP12PEM();
+  const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
+
+  const sig = new SignedXml();
+const sigL = sig as LegacySignedXml;
+sigL.signingKey = keyPem;
+sigL.keyInfoProvider = {
+  getKeyInfo: () =>
+    `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+};
+
+  sig.addReference({
+    xpath: "//*[local-name(.)='getToken']",
+    transforms: [
+      "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
+      "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+    ],
+    digestAlgorithm: "http://www.w3.org/2000/09/xmldsig#sha1",
   });
-  const text = await r.text();
-  if (!r.ok) throw new Error(`SOAP ${soapAction} ${r.status}: ${text}`);
-  return text;
+
+  sig.computeSignature(xml);
+  return sig.getSignedXml();
 }
-
-// Extrae nodo por regex
-function pick(xml: string, tag: string) {
-  const m = xml.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
-  if (!m) throw new Error(`No <${tag}> en SOAP`);
-  return m[1].trim();
-}
-
-/** ============ Token (CrSeed + firma de semilla) ============= */
-
-// TODO: implementar firma XML-DSig real de la semilla con tu PFX.
-// Por ahora retorna un envoltorio no firmado para mantener el flujo.
-function signSeedXML(semilla: string): string {
-  return `<getToken><item><![CDATA[<Semilla>${semilla}</Semilla>]]></item></getToken>`;
+async function getTokenFromSeed(signedXml: string): Promise<string> {
+  const env = soapEnv(`<getTokenFromSeed><pszXml>${signedXml}</pszXml></getTokenFromSeed>`);
+  const resp = await postSOAP(`/DTEWS/GetTokenFromSeed.jws`, env);
+  return pick(resp, "TOKEN");
 }
 
 export async function getToken(): Promise<string> {
-  // 1) CrSeed
-  const req1 = `<?xml version="1.0" encoding="ISO-8859-1"?>
-  <SII:SolicitaToken xmlns:SII="http://www.sii.cl/XMLSchema">
-    <SII:inn:SolicitudToken xmlns:SII:inn="http://www.sii.cl/XMLSchema">
-      <SII:inn:NombreCertificado>dummy</SII:inn:NombreCertificado>
-    </SII:inn:SolicitudToken>
-  </SII:SolicitaToken>`;
-  const respSeed = await soapPost(SII_CERT.CR_SEED, "urn:CrSeed", req1);
-  const semilla = pick(respSeed, "SEMILLA");
-
-  // 2) Firma Semilla -> getTokenFromSeed
-  const signed = signSeedXML(semilla);
-  const req2 = `<?xml version="1.0" encoding="ISO-8859-1"?>
-  <SII:getTokenFromSeed xmlns:SII="http://www.sii.cl/XMLSchema">
-    ${signed}
-  </SII:getTokenFromSeed>`;
-  const respTok = await soapPost(SII_CERT.GET_TOKEN, "urn:getTokenFromSeed", req2);
-
-  // Si firmas bien, aquí devuelve <TOKEN>real...</TOKEN>.
-  const token = pick(respTok, "TOKEN");
+  const hasCert = !!process.env.SII_CERT_P12_B64 && !!process.env.SII_CERT_PASSWORD;
+  if (!hasCert) return "TOKEN_FAKE_CERT";
+  const seed = await getSeed();
+  const seedXml = buildSeedXML(seed);
+  const signed = signXmlEnveloped(seedXml);
+  const token = await getTokenFromSeed(signed);
   return token;
 }
 
-/** =============== Envío DTE (sobre + firma) ================== */
+/** ============ Envío DTE (Sobre) ============ */
 
-// Construye Sobre con SetDTE (sin firma digital aún)
 function buildSobreEnvio(dteXml: string): string {
   const now = new Date().toISOString().slice(0, 19);
   return `<?xml version="1.0" encoding="ISO-8859-1"?>
-  <EnvioDTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
-    <SetDTE ID="SetDoc">
-      <Caratula version="1.0">
-        <RutEmisor>${process.env.BILLING_RUT}</RutEmisor>
-        <RutEnvia>${process.env.BILLING_RUT}</RutEnvia>
-        <RutReceptor>60803000-K</RutReceptor>
-        <FchResol>2014-01-01</FchResol>
-        <NroResol>0</NroResol>
-        <TmstFirmaEnv>${now}</TmstFirmaEnv>
-        <SubTotDTE>
-          <TpoDTE>39</TpoDTE><NroDTE>1</NroDTE>
-        </SubTotDTE>
-      </Caratula>
-      ${dteXml}
-    </SetDTE>
-  </EnvioDTE>`;
+<EnvioDTE xmlns="http://www.sii.cl/SiiDte" version="1.0">
+  <SetDTE ID="SetDoc">
+    <Caratula version="1.0">
+      <RutEmisor>${process.env.BILLING_RUT}</RutEmisor>
+      <RutEnvia>${process.env.BILLING_RUT}</RutEnvia>
+      <RutReceptor>60803000-K</RutReceptor>
+      <FchResol>2014-01-01</FchResol>
+      <NroResol>0</NroResol>
+      <TmstFirmaEnv>${now}</TmstFirmaEnv>
+      <SubTotDTE><TpoDTE>39</TpoDTE><NroDTE>1</NroDTE></SubTotDTE>
+    </Caratula>
+    ${dteXml}
+  </SetDTE>
+</EnvioDTE>`;
 }
 
-// TODO: firmar XML del EnvioDTE con tu certificado (XML-DSig)
-// Mientras tanto, devuelve el mismo XML para mantener el flujo.
 function signSobreXML(xmlSobre: string): string {
-  return xmlSobre;
+  const { keyPem, certPem } = loadP12PEM();
+  const certB64 = certPem.replace(/-----(BEGIN|END) CERTIFICATE-----|\s/g, "");
+
+  const sig = new SignedXml();
+const sigL = sig as LegacySignedXml;
+sigL.signingKey = keyPem;
+sigL.keyInfoProvider = {
+  getKeyInfo: () =>
+    `<X509Data><X509Certificate>${certB64}</X509Certificate></X509Data>`,
+};
+
+  sig.addReference({
+    xpath: "/*[local-name(.)='EnvioDTE']",
+    transforms: [
+      "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
+      "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+    ],
+    digestAlgorithm: "http://www.w3.org/2000/09/xmldsig#sha1",
+  });
+
+  sig.computeSignature(xmlSobre);
+  return sig.getSignedXml();
 }
 
 export async function sendEnvioDTE(xmlDte: string, token: string) {
   const sobre = buildSobreEnvio(xmlDte);
   const firmado = signSobreXML(sobre);
 
-  const soap = `<?xml version="1.0" encoding="ISO-8859-1"?>
-  <SII:EnviarDTE xmlns:SII="http://www.sii.cl/XMLSchema">
-    <SII:token>${token}</SII:token>
-    <SII:archivo><![CDATA[${firmado}]]></SII:archivo>
-  </SII:EnviarDTE>`;
+  const env = soapEnv(
+    `<upload><fileName>SetDTE.xml</fileName><contentFile><![CDATA[${firmado}]]></contentFile></upload>`
+  );
 
-  const resp = await soapPost(SII_CERT.ENVIO_DTE, "urn:EnviarDTE", soap);
-  const trackid = pick(resp, "TRACKID"); // con firma/token reales, SII responde un trackid real
+  // Enviar con TOKEN en Cookie
+  const r = await fetch(`${BASE}/DTEWS/EnvioDTE.jws`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/xml; charset=ISO-8859-1",
+      "SOAPAction": "",
+      "Cookie": `TOKEN=${token}`,
+    },
+    body: env,
+  });
+  const txt = await r.text();
+  if (!r.ok) throw new Error(`SOAP EnvioDTE ${r.status}: ${txt}`);
+  const trackid = pick(txt, "TRACKID");
   return { trackid };
 }
