@@ -5,6 +5,8 @@ import { create } from "xmlbuilder2";
 import { SignedXml } from "xml-crypto";
 import { loadP12PEM } from "./cert";
 import { loadP12KeyAndCert } from "./cert"; 
+import { ensureMtlsDispatcher } from "@/lib/cert";
+
 /** ==================== CAF & Cert ===================== */
 
 type Caf = {
@@ -142,21 +144,24 @@ const soapEnv = (inner: string) =>
   `<?xml version="1.0" encoding="ISO-8859-1"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"><soapenv:Body>${inner}</soapenv:Body></soapenv:Envelope>`;
 
 async function postSOAP(path: string, body: string): Promise<string> {
+  ensureMtlsDispatcher();
   const url = `${BASE}${path}`;
-  const r = await fetch(url, {
+
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "text/xml; charset=ISO-8859-1",
       "Accept": "text/xml,application/xml,text/plain",
       "SOAPAction": "",
     },
-    body,
+    body: Buffer.from(body, "latin1"),
   });
 
-  const txt = await r.text();
-  console.error("[SII SOAP]", path, "status:", r.status, "len:", txt.length, "head:", txt.slice(0, 200));
+  const txt = await res.text();
+  // debug dentro de la función, usando "res", no "r"
+  console.error("[SII SOAP]", path, "status:", res.status, "len:", txt.length, "head:", txt.slice(0, 200));
 
-  if (!r.ok) throw new Error(`SOAP ${path} ${r.status}: ${txt.slice(0, 400)}`);
+  if (!res.ok) throw new Error(`SOAP ${path} ${res.status}: ${txt.slice(0, 400)}`);
   return txt;
 }
 
@@ -184,8 +189,7 @@ export async function getSeed(): Promise<string> {
 
 
 function buildSeedXML(seed: string): string {
-  // sin xmlns ni <?xml ...?>
-  return `<getToken><item><Semilla>${seed}</Semilla></item></getToken>`;
+  return `<getToken xmlns="http://www.sii.cl/SiiDte"><item><Semilla>${seed}</Semilla></item></getToken>`;
 }
 
 // Firma del getToken (seed)
@@ -233,11 +237,11 @@ async function getTokenFromSeed(signedXml: string): Promise<string> {
   if (!mRet) throw new Error(`No <getTokenReturn> en respuesta. Head: ${resp.slice(0,400)}`);
 
   const decoded = mRet[1].replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
-
   const mTok = decoded.match(/<TOKEN>([^<]+)<\/TOKEN>/i);
   if (!mTok) throw new Error(`No <TOKEN> en respuesta decodificada. Head: ${decoded.slice(0,200)}`);
   return mTok[1].trim();
 }
+
 
 
 
