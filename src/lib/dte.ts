@@ -18,6 +18,17 @@ type Caf = {
   xml: string;
 };
 
+type AddRefV6 = (opts: {
+  uri: string;
+  transforms: string[];
+  digestAlgorithm: string;
+}) => void;
+type AddRefV1 = (
+  xpath: string,
+  transforms: string[],
+  digestAlgorithm: string
+) => void;
+
 function withKey(sig: SignedXml, certB64: string, key: import("crypto").KeyObject) {
   const target = sig as unknown as {
     signingKey?: import("crypto").KeyObject;
@@ -198,18 +209,31 @@ type AddRefOpts = {
   digestAlgorithm: string;
 };
 function addRefById(sig: SignedXml, id: string) {
-  // expone idAttributes para implementación de xml-crypto
+  // habilita búsqueda por atributos de ID
   (sig as unknown as { idAttributes?: string[] }).idAttributes = ["ID", "Id"];
 
-  // llama al método con opciones de objeto (v6)
-  (sig as unknown as { addReference: (opts: AddRefOpts) => void }).addReference({
-    uri: `#${id}`,
-    transforms: [
-      "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
-      "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
-    ],
-    digestAlgorithm: "http://www.w3.org/2000/09/xmldsig#sha1",
-  });
+  const transforms = [
+    "http://www.w3.org/2000/09/xmldsig#enveloped-signature",
+    "http://www.w3.org/TR/2001/REC-xml-c14n-20010315",
+  ];
+  const digest = "http://www.w3.org/2000/09/xmldsig#sha1";
+
+  const addRef = (sig as unknown as { addReference: unknown }).addReference as
+    | AddRefV6
+    | AddRefV1;
+
+  // detecta firma por número de parámetros
+  if ((addRef as AddRefV6).length === 1) {
+    // xml-crypto 6.x
+    (addRef as AddRefV6)({
+      uri: `#${id}`,
+      transforms,
+      digestAlgorithm: digest,
+    });
+  } else {
+    // xml-crypto 1.x (usa XPath simple y válido)
+    (addRef as AddRefV1)(`//*[@ID='${id}']`, transforms, digest);
+  }
 }
 
 function signXmlEnveloped(xml: string): string {
