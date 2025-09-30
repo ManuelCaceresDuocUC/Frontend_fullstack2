@@ -8,6 +8,26 @@ const { SignedXml } = require("xml-crypto");
 import { loadP12Pem, ensureMtlsDispatcher } from "@/lib/cert";
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import crypto from "node:crypto";
+type XEl = { localName: string; textContent: string | null };
+
+function unescapeXmlEntities(s: string): string {
+  return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+function extractTrackIdFromUpload(respSoap: string): string {
+  const doc = new XP().parseFromString(respSoap, "text/xml");
+  const nodes = Array.from(doc.getElementsByTagName("*")) as XEl[];
+  const ret = nodes.find((n) => n.localName === "uploadReturn");
+  if (!ret || !ret.textContent) throw new Error(`No <uploadReturn> en respuesta. Head: ${respSoap.slice(0, 400)}`);
+  const inner = ret.textContent.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const m = inner.match(/<TRACKID>(\d+)<\/TRACKID>/i);
+  if (!m) {
+    const estado = inner.match(/<ESTADO>([^<]+)<\/ESTADO>/i)?.[1];
+    const glosa  = inner.match(/<GLOSA>([^<]+)<\/GLOSA>/i)?.[1];
+    throw new Error(`Sin TRACKID. ESTADO=${estado ?? "?"} GLOSA=${glosa ?? inner.slice(0,200)}`);
+  }
+  return m[1];
+}
+
 
 function sanitizeXmlForLog(xml: string) {
   return xml
@@ -309,14 +329,11 @@ export async function getSeed(): Promise<string> {
   const resp = await postSOAP(`/DTEWS/CrSeed.jws`, env);
 
   const doc = new XP().parseFromString(resp, "text/xml");
-  // Busca cualquier prefijo: ns:getSeedReturn, getSeedReturn, etc.
-  const nodes = Array.from(doc.getElementsByTagName("*"));
-  const ret = nodes.find(n => n.localName === "getSeedReturn");
+  const nodes = Array.from(doc.getElementsByTagName("*")) as XEl[];
+  const ret = nodes.find((n) => n.localName === "getSeedReturn");
   if (!ret || !ret.textContent) throw new Error(`No <getSeedReturn> en respuesta. Head: ${resp.slice(0, 200)}`);
 
-  // Decodifica entidades (&lt;SEMILLA>…)
-  const decoded = ret.textContent
-    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const decoded = ret.textContent.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
   const m = decoded.match(/<SEMILLA>([^<]+)<\/SEMILLA>/i);
   if (!m) throw new Error(`No <SEMILLA> en respuesta decodificada. Head: ${decoded.slice(0, 200)}`);
   return m[1].trim();
@@ -344,8 +361,8 @@ async function getTokenFromSeed(signedXml: string): Promise<string> {
   const resp = await postSOAP(`/DTEWS/GetTokenFromSeed.jws`, env);
 
   const doc = new XP().parseFromString(resp, "text/xml");
-  const nodes = Array.from(doc.getElementsByTagName("*"));
-  const ret = nodes.find(n => n.localName === "getTokenReturn");
+  const nodes = Array.from(doc.getElementsByTagName("*")) as XEl[];
+  const ret = nodes.find((n) => n.localName === "getTokenReturn");
   if (!ret || !ret.textContent)
     throw new Error(`No <getTokenReturn> en respuesta. Head: ${resp.slice(0, 400)}`);
 
@@ -355,6 +372,7 @@ async function getTokenFromSeed(signedXml: string): Promise<string> {
     throw new Error(`No <TOKEN> en respuesta decodificada. Head: ${decoded.slice(0, 400)}`);
   return mTok[1].trim();
 }
+
 
 export async function getToken(): Promise<string> {
   const hasCert = !!process.env.SII_CERT_P12_B64 || !!process.env.SII_CERT_P12_PATH;
@@ -369,6 +387,7 @@ export async function getToken(): Promise<string> {
 /** ========== Envío DTE (Sobre) ========== */
 function buildSobreEnvio(dteXml: string): string {
   const now = new Date().toISOString().slice(0, 19);
+  const tpo = Number(dteXml.match(/<TipoDTE>(\d+)<\/TipoDTE>/)?.[1] ?? 39);
   return `<?xml version="1.0" encoding="ISO-8859-1"?>
 <EnvioDTE xmlns="http://www.sii.cl/SiiDte" version="1.0" ID="ENV" Id="ENV">
   <SetDTE ID="SetDoc" Id="SetDoc">
@@ -379,12 +398,13 @@ function buildSobreEnvio(dteXml: string): string {
       <FchResol>2014-01-01</FchResol>
       <NroResol>0</NroResol>
       <TmstFirmaEnv>${now}</TmstFirmaEnv>
-      <SubTotDTE><TpoDTE>39</TpoDTE><NroDTE>1</NroDTE></SubTotDTE>
+      <SubTotDTE><TpoDTE>${tpo}</TpoDTE><NroDTE>1</NroDTE></SubTotDTE>
     </Caratula>
     ${dteXml}
   </SetDTE>
 </EnvioDTE>`;
 }
+
 
 function signSobre(xmlSobre: string): string {
   return signXmlEnveloped(xmlSobre, "ENV");
@@ -395,7 +415,10 @@ export async function sendEnvioDTE(xmlDte: string, token: string) {
   const env = soapEnv(
     `<upload><fileName>SetDTE.xml</fileName><contentFile><![CDATA[${firmado}]]></contentFile></upload>`
   );
+  if (process.env.DTE_DEBUG === "1") {
+    console.log("\n=== Sobre firmado ===\n" + firmado.slice(0, 800) + "\n...recortado...\n=== fin ===\n");
+  }
   const txt = await postSOAP(`/DTEWS/EnvioDTE.jws`, env, { Cookie: `TOKEN=${token}` });
-  const trackid = pick(txt, "TRACKID");
+  const trackid = extractTrackIdFromUpload(txt);
   return { trackid };
 }
