@@ -1,6 +1,6 @@
 // src/app/api/debug/p12/route.ts
 import { NextResponse } from "next/server";
-import { loadP12PEM } from "@/lib/cert";
+ import { loadP12Pem } from "@/lib/cert";
 import { createPrivateKey } from "crypto";
 
 export const runtime = "nodejs";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const { keyPem, certPem } = loadP12PEM();
+    const { keyPem, certPem } = loadP12Pem();
     const k = createPrivateKey({ key: keyPem.replace(/\r/g, "") });
 
     return NextResponse.json({

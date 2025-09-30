@@ -7,10 +7,9 @@ export async function GET() {
   try {
     const token = await getToken();
     return Response.json({ ok: true, tokenHead: token.slice(0, 24) });
-  } catch (e: any) {
-    return Response.json(
-      { ok: false, error: String(e?.message || e), stack: String(e?.stack || "").split("\n").slice(0, 6) },
-      { status: 500 },
-    );
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const st = e instanceof Error ? String(e.stack || "").split("\n").slice(0, 6) : [];
+    return Response.json({ ok: false, error: msg, stack: st }, { status: 500 });
   }
 }
