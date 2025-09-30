@@ -40,7 +40,7 @@ let mtlsSet = false;
 export function ensureMtlsDispatcher(): void {
   if (mtlsSet) return;
   const { keyPem, certPem } = loadP12Pem();
-  const agent = new Agent({ connect: { tls: { key: keyPem, cert: certPem } } } as any);
-  setGlobalDispatcher(agent);
+const opts = { connect: { tls: { key: keyPem, cert: certPem } } } as unknown as ConstructorParameters<typeof Agent>[0];
+const agent = new Agent(opts);  setGlobalDispatcher(agent);
   mtlsSet = true;
 }

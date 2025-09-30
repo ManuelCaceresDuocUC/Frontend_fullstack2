@@ -27,7 +27,8 @@ export async function GET() {
     const { trackid } = await sendEnvioDTE(dteFirmado, token);
 
     return Response.json({ ok: true, trackid });
-  } catch (e: any) {
-    return Response.json({ ok: false, error: String(e?.message || e) }, { status: 500 });
+   } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+  return Response.json({ ok: false, error: msg }, { status: 500 });
   }
 }

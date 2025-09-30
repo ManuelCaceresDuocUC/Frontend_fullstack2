@@ -3,7 +3,7 @@ import path from "node:path";
 import { create } from "xmlbuilder2";
 import { DOMParser as XP } from "@xmldom/xmldom";
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { SignedXml } = require("xml-crypto");
 import { loadP12Pem, ensureMtlsDispatcher } from "@/lib/cert";
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
@@ -174,7 +174,17 @@ function injectTEDandTmst(dteXml: string, tedXml: string, ts: string): string {
     `</Encabezado>\n${tedXml}\n<TmstFirma>${ts}</TmstFirma>\n</Documento>`
   );
 }
-function addRefById(sig: any, id: string) {
+function addRefById(
+   sig: {
+     addReference: (opts: {
+       xpath: string;
+       transforms: string[];
+       digestAlgorithm: string;
+       uri: string;
+     }) => void;
+   },
+  id: string
+ ) {
   const xpath = `//*[@Id='${id}' or @ID='${id}']`;
   sig.addReference({
     xpath,
