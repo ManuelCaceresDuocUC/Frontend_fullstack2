@@ -36,7 +36,7 @@
     "swr": "^2.3.6",
     "transbank-sdk": "^6.1.0",
     "undici": "^7.16.0",
-    "xml-crypto": "6.1.1",
+    "xml-crypto": "6.1.2",
     "xmlbuilder2": "^3.1.1",
     "zustand": "^5.0.8"
   },
@@ -57,10 +57,9 @@
     "tailwindcss": "^4",
     "typescript": "^5"
   },
+  "pnpm": {
   "overrides": {
-    "xpath": "0.0.32",
-    "'xml-crypto@6.1.2'": {
-      "xpath": "0.0.32"
-    }
+    "xpath": "0.0.34"
   }
+}
 }
