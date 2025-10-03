@@ -4,7 +4,25 @@ import fs from "fs/promises";
 import path from "path";
 
 const prisma = new PrismaClient();
+async function ensureDecants(perfume) {
+  const ML = [3, 5, 10]; // ajusta si quieres otros
+  const perMl = perfume.price / Math.max(1, perfume.ml);
 
+  for (const ml of ML) {
+    const price = Math.ceil((perMl * ml) / 10) * 10;
+    await prisma.perfumeVariant.upsert({
+      where: { perfumeId_ml: { perfumeId: perfume.id, ml } },
+      update: {}, // no toques precio aquí en seed
+      create: {
+        perfumeId: perfume.id,
+        ml,
+        price,
+        stock: 0,      // stock inicial 0; lo manejas luego en admin
+        active: true,
+      },
+    });
+  }
+}
 const mapCat = (c) => {
   const u = String(c || "").toUpperCase();
   if (["NICHO", "ARABES", "DISEÑADOR", "OTROS"].includes(u)) return u;

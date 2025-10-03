@@ -107,13 +107,18 @@ export async function POST(req: Request) {
     } else {
       // Restituye stock con updateMany
       await Promise.all(
-        order.items.map((line) =>
-          prisma.stock.updateMany({
-            where: { perfumeId: line.perfumeId },
-            data: { qty: { increment: line.qty } },
-          })
-        )
-      );
+  order.items.map((line) =>
+    line.variantId
+      ? prisma.perfumeVariant.update({
+          where: { id: line.variantId },
+          data: { stock: { increment: line.qty } },
+        })
+      : prisma.perfumeVariant.updateMany({
+          where: { perfumeId: line.perfumeId, ml: line.ml },
+          data: { stock: { increment: line.qty } },
+        })
+  )
+);
 
       await prisma.order.update({
         where: { id: orderId },

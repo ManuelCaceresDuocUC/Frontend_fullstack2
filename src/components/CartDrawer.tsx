@@ -3,18 +3,19 @@ import Link from "next/link";
 import Image from "next/image";
 import { useCart } from "@/store/useCart";
 
-const fmt = (n:number)=> n.toLocaleString("es-CL",{style:"currency",currency:"CLP",maximumFractionDigits:0});
+const fmt = (n: number) =>
+  n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
 export default function CartDrawer() {
-  const opened = useCart(s => s.opened);
-  const close  = useCart(s => s.close);
-  const items  = useCart(s => s.items);
-  const inc    = useCart(s => s.inc);     // (id:string, ml?:number)=>void
-  const dec    = useCart(s => s.dec);     // (id:string, ml?:number)=>void
-  const remove = useCart(s => s.remove);  // (id:string, ml?:number)=>void
-  const setQty = useCart(s => s.setQty);  // (id:string, ml:number|undefined, qty:number)=>void
+  const opened = useCart((s) => s.opened);
+  const close  = useCart((s) => s.close);
+  const items  = useCart((s) => s.items);
+  const inc    = useCart((s) => s.inc);     // (id:string, ml?:number|null)=>void
+  const dec    = useCart((s) => s.dec);     // (id:string, ml?:number|null)=>void
+  const remove = useCart((s) => s.remove);  // (id:string, ml?:number|null)=>void
+  const setQty = useCart((s) => s.setQty);  // (id:string, ml:number|null|undefined, qty:number)=>void
 
-  const total = items.reduce((s,i)=>s + i.price*i.qty, 0);
+  const total = items.reduce((s, i) => s + i.price * i.qty, 0);
 
   return (
     <>
@@ -41,76 +42,83 @@ export default function CartDrawer() {
           {items.length === 0 ? (
             <p className="text-slate-600">Vacío por ahora.</p>
           ) : (
-            items.map(item => (
-              <div key={`${item.id}-${item.ml ?? "na"}`} className="flex gap-3 p-2 rounded-xl border border-[var(--color-border)]">
-                {/* thumb */}
-                <div className="relative h-16 w-16 shrink-0 rounded-lg overflow-hidden bg-[var(--color-surface)]">
-                  <Image
-                    src={item.image ?? "/placeholder.png"}
-                    alt={`${item.brand} ${item.name}`}
-                    fill
-                    className="object-cover"
-                    sizes="64px"
-                  />
-                </div>
-
-                {/* info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="truncate">
-                      <p className="font-medium truncate">{item.brand} {item.name}</p>
-                      <p className="text-sm text-slate-500">{item.ml ? `${item.ml} ml` : "—"}</p>
-                    </div>
-                    <button
-                      onClick={()=>remove(item.id, item.ml)}
-                      className="text-sm text-slate-500 hover:text-red-600"
-                      aria-label="Eliminar"
-                    >
-                      Eliminar
-                    </button>
+            items.map((item) => {
+              const atMax = typeof item.stock === "number" && item.qty >= item.stock;
+              const mlKey = item.ml ?? "na";
+              return (
+                <div key={`${item.id}-${mlKey}`} className="flex gap-3 p-2 rounded-xl border border-[var(--color-border)]">
+                  {/* thumb */}
+                  <div className="relative h-16 w-16 shrink-0 rounded-lg overflow-hidden bg-[var(--color-surface)]">
+                    <Image
+                      src={item.image ?? "/placeholder.png"}
+                      alt={`${item.brand} ${item.name}`}
+                      fill
+                      className="object-cover"
+                      sizes="64px"
+                    />
                   </div>
 
-                  {/* qty controls */}
-                  <div className="mt-2 flex items-center justify-between">
-                    <div className="inline-flex items-center rounded-lg border border-[var(--color-border)]">
+                  {/* info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="truncate">
+                        <p className="font-medium truncate">{item.brand} {item.name}</p>
+                        <p className="text-sm text-slate-500">{item.ml ? `${item.ml} ml` : "—"}</p>
+                      </div>
                       <button
-                        onClick={()=>dec(item.id, item.ml)}
-                        className="px-3 py-1.5 hover:bg-slate-100"
-                        aria-label="Disminuir"
+                        onClick={() => remove(item.id, item.ml ?? null)}
+                        className="text-sm text-slate-500 hover:text-red-600"
+                        aria-label="Eliminar"
                       >
-                        −
+                        Eliminar
                       </button>
-                      <input
-                        type="number"
-                        min={1}
-                        value={item.qty}
-                        onChange={(e)=>{
-                          const q = Math.max(1, Number(e.target.value || 1));
-                          setQty(item.id, item.ml, q);
-                        }}
-                        className="w-12 text-center outline-none"
-                        aria-label="Cantidad"
-                      />
-                      <button
-                        onClick={()=>inc(item.id, item.ml)}
-                        disabled={typeof item.stock === "number" && item.qty >= item.stock}
-                        className="disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        +
-                      </button>
-
-                      <p className="mt-1 text-xs text-slate-500">
-                        {item.stock !== undefined ? `Stock: ${item.stock}` : null}
-                      </p>
                     </div>
 
-                    <div className="text-right font-semibold">
-                      {fmt(item.price * item.qty)}
+                    {/* qty controls */}
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="inline-flex items-center rounded-lg border border-[var(--color-border)]">
+                        <button
+                          onClick={() => dec(item.id, item.ml ?? null)}
+                          className="px-3 py-1.5 hover:bg-slate-100"
+                          aria-label="Disminuir"
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          value={item.qty}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            const q = Number.isFinite(raw) ? Math.max(1, raw) : 1;
+                            setQty(item.id, item.ml ?? null, q);
+                          }}
+                          className="w-12 text-center outline-none"
+                          aria-label="Cantidad"
+                        />
+                        <button
+                          onClick={() => inc(item.id, item.ml ?? null)}
+                          disabled={atMax}
+                          className="px-3 py-1.5 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                          aria-label="Aumentar"
+                          title={atMax ? "Alcanzaste el stock disponible" : "Aumentar"}
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      <div className="text-right font-semibold">
+                        {fmt(item.price * item.qty)}
+                      </div>
                     </div>
+
+                    {typeof item.stock === "number" && (
+                      <p className="mt-1 text-xs text-slate-500">Stock: {item.stock}</p>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 

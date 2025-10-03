@@ -1,36 +1,23 @@
 // src/app/api/checkout/route.ts
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { PaymentMethod } from "@prisma/client";
+import { PaymentMethod, PaymentStatus, Prisma } from "@prisma/client";
 
-const CK = "cart_v1";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+const CK = "cart";
 
 type CartCookieItem = {
-  productId: string;      // Perfume.id
-  variantId: string;      // PerfumeVariant.id | LEGACY-...
+  productId: string;
+  variantId: string;
   name: string;
   brand: string;
   ml: number;
-  unitPrice: number;      // CLP
+  unitPrice: number;
   qty: number;
   image: string | null;
-};
-
-type CheckoutBody = {
-  email: string;
-  buyerName: string;
-  phone?: string;
-  shippingStreet?: string;
-  shippingCity?: string;
-  shippingRegion?: string;
-  shippingZip?: string;
-  shippingNotes?: string;
-  shippingFee?: number;
-  paymentMethod?: "WEBPAY" | "MANUAL" | "SERVIPAG";
 };
 
 function isCartCookieItem(x: unknown): x is CartCookieItem {
@@ -59,113 +46,117 @@ function parseCart(raw?: string): CartCookieItem[] {
   }
 }
 
-const safeInt = (n: number) => Math.max(0, Math.trunc(n));
-
-function toPaymentMethod(s?: string): PaymentMethod {
-  switch (s) {
-    case "MANUAL":
-      return PaymentMethod.MANUAL;
-    case "SERVIPAG":
-      return PaymentMethod.SERVIPAG;
-    case "WEBPAY":
-    default:
-      return PaymentMethod.WEBPAY;
-  }
-}
+type LineCreate = {
+  perfumeId: string;
+  variantId: string;
+  name: string;
+  brand: string;
+  ml: number;
+  unitPrice: number;
+  qty: number;
+};
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as CheckoutBody;
-
-  // 1) Cargar carrito desde cookie
+  // Lee carrito
   const jar = await cookies();
-  const items = parseCart(jar.get(CK)?.value);
-  if (items.length === 0) {
-    return NextResponse.json({ error: "carrito_vacio" }, { status: 400 });
+  const cart = parseCart(jar.get(CK)?.value);
+  if (cart.length === 0) {
+    return NextResponse.json({ error: "carrito vacío" }, { status: 400 });
   }
 
-  // 2) Totales
-  const subtotal = items.reduce((s, it) => s + safeInt(it.unitPrice) * safeInt(it.qty), 0);
-  const region = body.shippingRegion ?? "";
-  const fallbackShip = region === "Valparaíso" ? 2000 : 3990;
-  const shippingFee = typeof body.shippingFee === "number" ? safeInt(body.shippingFee) : fallbackShip;
+  // Carga variantes
+  const ids = cart.map((c) => c.variantId);
+  const variants = await prisma.perfumeVariant.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      perfumeId: true,
+      ml: true,
+      price: true,
+      stock: true,
+      active: true,
+      perfume: { select: { name: true, brand: true } },
+    },
+  });
+  const byId = new Map(variants.map((v) => [v.id, v]));
+
+  // Valida y arma líneas con precios de la BD
+  const lines: LineCreate[] = cart.map((c): LineCreate => {
+    const v = byId.get(c.variantId);
+    if (!v) throw new Error("variante no encontrada");
+    if (!v.active) throw new Error("variante inactiva");
+    if (v.stock < c.qty) throw new Error("sin stock");
+    return {
+      perfumeId: v.perfumeId,
+      variantId: v.id,
+      name: v.perfume.name,
+      brand: v.perfume.brand,
+      ml: v.ml,
+      unitPrice: v.price,
+      qty: c.qty,
+    };
+  });
+
+  const subtotal = lines.reduce((a, l) => a + l.unitPrice * l.qty, 0);
+  const shippingFee = 0; // ajusta tu lógica de envío
   const total = subtotal + shippingFee;
 
-  // 3) Transacción: descontar stock y crear orden
+  // Datos del comprador (opcionales en body)
+  let body: unknown;
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      // 3.a) Necesidad por variante real
-      const needByVariant = items
-        .filter((i) => i.variantId && !i.variantId.startsWith("LEGACY"))
-        .reduce<Record<string, number>>((acc, i) => {
-          acc[i.variantId] = (acc[i.variantId] ?? 0) + safeInt(i.qty);
-          return acc;
-        }, {});
+    body = await req.json();
+  } catch {
+    body = {};
+  }
+  const b = (body as Record<string, unknown>) || {};
+  const email = String(b.email ?? "");
+  const buyerName = String(b.buyerName ?? "");
+  const phone = String(b.phone ?? "");
+  const shippingStreet = String(b.shippingStreet ?? "");
+  const shippingCity = String(b.shippingCity ?? "");
+  const shippingRegion = String(b.shippingRegion ?? "");
+  const shippingZip = String(b.shippingZip ?? "");
+  const shippingNotes = String(b.shippingNotes ?? "");
 
-      // 3.b) Descuento atómico
-      const updates = await Promise.all(
-        Object.entries(needByVariant).map(([variantId, need]) =>
-          tx.perfumeVariant.updateMany({
-            where: { id: variantId, stock: { gte: need } },
-            data: { stock: { decrement: need } },
-          })
-        )
-      );
-      if (updates.some((u) => u.count !== 1)) {
-        throw new Error("stock_insuficiente");
-      }
-
-      // 3.c) Crear Order + Items + Payment + Shipment
-      const order = await tx.order.create({
-        data: {
-          email: body.email,
-          buyerName: body.buyerName,
-          phone: body.phone ?? "",
-          shippingStreet: body.shippingStreet ?? "",
-          shippingCity: body.shippingCity ?? "",
-          shippingRegion: region,
-          shippingZip: body.shippingZip ?? "",
-          shippingNotes: body.shippingNotes ?? "",
-          subtotal,
-          shippingFee,
-          total,
-          items: {
-            create: items.map((it) => ({
-              perfumeId: it.productId,
-              variantId: it.variantId.startsWith("LEGACY") ? null : it.variantId,
-              name: it.name,
-              brand: it.brand,
-              ml: safeInt(it.ml),
-              unitPrice: safeInt(it.unitPrice),
-              qty: safeInt(it.qty),
-            })),
-          },
-          payment: {
-            create: {
-              method: toPaymentMethod(body.paymentMethod),
-              amount: total,
-            },
-          },
-          shipment: {
-            create: {
-              carrier: region === "Valparaíso" ? "Despacho propio" : "Bluexpress",
-            },
+  // Transacción: crea orden y descuenta stock
+  const created = await prisma.$transaction(async (tx) => {
+    const order = await tx.order.create({
+      data: {
+        email,
+        buyerName,
+        phone,
+        shippingStreet,
+        shippingCity,
+        shippingRegion,
+        shippingZip,
+        shippingNotes,
+        subtotal,
+        shippingFee,
+        total,
+        items: { create: lines },
+        payment: {
+          create: {
+            method: PaymentMethod.WEBPAY,
+            status: PaymentStatus.INITIATED,
+            amount: total,
           },
         },
-        select: { id: true, total: true },
-      });
-
-      return order;
+      },
+      select: { id: true },
     });
 
-    // 4) Limpiar cookie y responder
-    const res = NextResponse.json({ ok: true, orderId: result.id, total: result.total });
-    res.cookies.set(CK, "", { path: "/", maxAge: 0 });
-    return res;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "error";
-    if (msg === "stock_insuficiente") {
-      return NextResponse.json({ error: "stock_insuficiente" }, { status: 409 });
-    }
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
+    await Promise.all(
+      lines.map((line) =>
+        tx.perfumeVariant.update({
+          where: { id: line.variantId },
+          data: { stock: { decrement: line.qty } },
+        })
+      )
+    );
+
+    return order;
+  });
+
+  // Respuesta mínima para continuar con Webpay u otro flujo
+  return NextResponse.json({ id: created.id, total }, { status: 200 });
 }

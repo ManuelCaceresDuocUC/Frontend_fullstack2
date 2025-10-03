@@ -1,7 +1,7 @@
 // src/app/perfumes/admin/page.tsx
 import { prisma } from "@/lib/prisma";
 import Client, { type Row } from "./Client";
-import type { Prisma, Perfume, Stock } from "@prisma/client";
+import type { Prisma, Perfume } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -26,25 +26,34 @@ function getImagesFromJson(v: Prisma.JsonValue | null): string[] {
   return [];
 }
 
-type PerfumeWithStock = Perfume & { Stock: Stock | null };
+type PerfumeWithVariants = Perfume & {
+  variants: { id: string; ml: number; price: number; stock: number; active: boolean }[];
+};
 
 export default async function Page() {
-  const data: PerfumeWithStock[] = await prisma.perfume.findMany({
+  const data: PerfumeWithVariants[] = await prisma.perfume.findMany({
     orderBy: { createdAt: "desc" },
-    include: { Stock: true },
+    include: {
+      variants: { select: { id: true, ml: true, price: true, stock: true, active: true } },
+    },
   });
 
-  const initialRows: Row[] = data.map((p) => ({
-    id: p.id,
-    nombre: p.name,
-    marca: p.brand,
-    ml: p.ml,
-    precio: p.price,
-    imagenes: getImagesFromJson(p.images),
-    categoria: dbToApiCat(String(p.tipo)),
-    qty: p.Stock?.qty ?? 0,
-    descripcion: p.description ?? "",
-  }));
+  const initialRows: Row[] = data.map((p) => {
+    const qty = p.variants.reduce((acc, v) => acc + (v.stock ?? 0), 0);
+    return {
+      id: p.id,
+      nombre: p.name,
+      marca: p.brand,
+      ml: p.ml,
+      precio: p.price,
+      imagenes: getImagesFromJson(p.images),
+      categoria: dbToApiCat(String(p.tipo)),
+      qty,
+      descripcion: p.description ?? "",
+      // Si tu <Client /> ya soporta variantes, puedes pasar también:
+      // variants: p.variants,
+    };
+  });
 
   return <Client initialRows={initialRows} />;
 }
