@@ -78,21 +78,26 @@ model Dte {
 }
 
 model Perfume {
-  id          String           @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   brand       String
   ml          Int
   price       Int
   images      Json?
   createdBy   String?
-  createdAt   DateTime         @default(now())
-  description String?          @db.Text
-  genero      Genero           @default(UNISEX)
-  isDecant    Boolean          @default(false)
+  createdAt   DateTime @default(now())
+  description String?  @db.Text
+  genero      Genero   @default(UNISEX)
+  isDecant    Boolean  @default(false)
   tipo        Perfume_category
-  updatedAt   DateTime         @updatedAt
+  updatedAt   DateTime @updatedAt
   Stock       Stock?
   OrderItem   OrderItem[]
+
+  // NUEVO
+  price3      Int?     // CLP 3 ml
+  price5      Int?     // CLP 5 ml
+  price10     Int?     // CLP 10 ml
 
   @@index([genero, tipo, isDecant])
 }
