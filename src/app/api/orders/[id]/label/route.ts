@@ -2,14 +2,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import { toBuffer as qrToBuffer } from "qrcode";
+import QRCode from "qrcode";
 import bwipjs from "bwip-js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const mm = (v: number) => (v * 72) / 25.4;
-const W = mm(100);
+const W = mm(100); // 100 x 150 mm
 const H = mm(150);
 
 export async function GET(_req: Request, context: unknown) {
@@ -23,69 +23,94 @@ export async function GET(_req: Request, context: unknown) {
     });
     if (!o) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
 
-    const carrier   = o.shipment?.carrier ?? (o.shippingRegion === "Valparaíso" ? "Despacho propio" : "Bluexpress");
-    const tracking  = o.shipment?.tracking ?? `BX-${o.id.slice(0, 8).toUpperCase()}`;
-    const remitente = process.env.LABEL_SENDER_NAME || "MAfums";
+    // -------- Datos base
+    const carrier   = (o.shipment?.carrier || (o.shippingRegion === "Valparaíso" ? "Despacho propio" : "Bluexpress")).toUpperCase();
+    const tracking  = o.shipment?.tracking || `BX-${o.id.slice(0, 8).toUpperCase()}`;
+    const buyerName = o.buyerName || "Cliente";
+    const street    = o.shippingStreet || "";
+    const cityReg   = `${o.shippingCity || ""}${o.shippingRegion ? `, ${o.shippingRegion}` : ""}${o.shippingZip ? ` · CP ${o.shippingZip}` : ""}`;
+    const notes     = (o.shippingNotes || "—").replace(/\s+/g, " ").trim();
+    const remitente = process.env.LABEL_SENDER_NAME || "LOS CÁCERES SPA (MAfums) · RUT 78.255.686-K";
     const remitAddr = process.env.LABEL_SENDER_ADDR || "Valparaíso, Chile";
+    const remitTel  = process.env.LABEL_SENDER_PHONE || "";
 
-    // Assets
-    const qrPng = await qrToBuffer(tracking, { errorCorrectionLevel: "M", margin: 0, width: 600, type: "png" });
+    // -------- Assets (QR + Code128)
+    const qrPayload = `TRACKING=${tracking};ORDEN=${o.id}`;
+    const qrPng = await QRCode.toBuffer(qrPayload, { errorCorrectionLevel: "M", margin: 0, width: 600, type: "png" });
+
     const barcodePng = await bwipjs.toBuffer({
       bcid: "code128",
       text: tracking,
       scale: 3,
-      height: 14,
+      height: 14,      // mm aprox escalado por bwipjs
       includetext: false,
       backgroundcolor: "FFFFFF",
       paddingwidth: 0,
       paddingheight: 0,
     });
 
-    // PDF
+    // -------- PDF
     const pdf = await PDFDocument.create();
     const page = pdf.addPage([W, H]);
     const helv = await pdf.embedFont(StandardFonts.Helvetica);
     const helvB = await pdf.embedFont(StandardFonts.HelveticaBold);
 
-    const draw = (t: string, x: number, y: number, size = 12, bold = false) =>
+    const draw = (t: string, x: number, y: number, size = 10, bold = false) =>
       page.drawText(t, { x, y, size, font: bold ? helvB : helv, color: rgb(0, 0, 0) });
 
-    // Marco
+    const wrap = (t: string, maxWidth: number, size: number, font = helv): string[] => {
+      const words = t.split(" ");
+      const lines: string[] = [];
+      let line = "";
+      for (const w of words) {
+        const test = line ? line + " " + w : w;
+        if (font.widthOfTextAtSize(test, size) <= maxWidth) {
+          line = test;
+        } else {
+          if (line) lines.push(line);
+          line = w;
+        }
+      }
+      if (line) lines.push(line);
+      return lines;
+    };
+
+    // Marco/corte
     page.drawRectangle({ x: mm(2), y: mm(2), width: W - mm(4), height: H - mm(4), borderColor: rgb(0, 0, 0), borderWidth: 1 });
 
-    // ===== Layout V2 con cursor =====
+    // Margen y cursor
     const PAD = mm(6);
     let y = H - PAD;
 
-    // QR fijo arriba-derecha
+    // QR arriba-derecha
     const qrImg = await pdf.embedPng(qrPng);
     const qrSize = mm(36);
     const qrX = W - PAD - qrSize;
     const qrY = H - PAD - qrSize;
     page.drawImage(qrImg, { x: qrX, y: qrY, width: qrSize, height: qrSize });
-    page.drawText("Escanea seguimiento", { x: qrX - mm(2), y: qrY - mm(3), size: 8, font: helv });
+    draw("Escanea seguimiento", qrX - mm(2), qrY - mm(3), 8);
 
-    // Header izquierda con cursor
-    const flow = (t: string, size = 12, bold = false) => { draw(t, PAD, y, size, bold); y -= size + 3; };
-
-    flow(carrier, 14, false);
-    flow(tracking, 26, true);
-    flow(new Intl.DateTimeFormat("es-CL", { dateStyle: "short", timeStyle: "short" }).format(o.createdAt), 9);
+    // Header izquierda
+    draw(carrier, PAD, y, 13, true); y -= 16;
+    draw(tracking, PAD, y, 24, true); y -= 28;
+    draw(new Intl.DateTimeFormat("es-CL", { dateStyle: "short", timeStyle: "short" }).format(o.createdAt), PAD, y, 9); y -= 12;
 
     // Separador
     page.drawLine({ start: { x: PAD, y }, end: { x: W - PAD, y }, thickness: 0.8, color: rgb(0, 0, 0) });
     y -= mm(4);
 
-    // Código de barras debajo del header
+    // Código de barras
     const bcImg = await pdf.embedPng(barcodePng);
     const bcH = mm(18);
     const bcW = W - PAD * 2;
     page.drawImage(bcImg, { x: PAD, y: y - bcH, width: bcW, height: bcH });
-    y -= bcH + mm(4);
+    y -= bcH + mm(3);
+    draw(tracking, PAD, y, 9); // texto pequeño bajo el barcode
+    y -= mm(5);
 
-    // Caja destinatario completa bajo el barcode
+    // Caja destinatario
     const boxTop = y;
-    const boxH = mm(58);
+    const boxH = mm(62);
     page.drawRectangle({
       x: PAD - mm(2),
       y: boxTop - boxH,
@@ -94,43 +119,56 @@ export async function GET(_req: Request, context: unknown) {
       borderColor: rgb(0, 0, 0),
       borderWidth: 1,
     });
-
     let yb = boxTop - mm(6);
-    const put = (t: string, size = 10, bold = false) => { draw(t, PAD, yb, size, bold); yb -= size + 4; };
+    draw("DESTINATARIO", PAD, yb, 11, true); yb -= 14;
 
-    put("DESTINATARIO", 11, true);
-    put(o.buyerName, 12);
-    put(`${o.shippingStreet}`, 10);
-    put(`${o.shippingCity}, ${o.shippingRegion}${o.shippingZip ? ` · CP ${o.shippingZip}` : ""}`, 10);
-    put("OBSERVACIONES:", 10, true);
-    put((o.shippingNotes || "—").slice(0, 60), 9);
+    // Nombre
+    draw(buyerName, PAD, yb, 12); yb -= 14;
 
-    // Avanza cursor general por debajo de la caja
+    // Dirección con wrap
+    const maxTxtW = W - PAD * 2;
+    for (const ln of wrap(street, maxTxtW, 10)) { draw(ln, PAD, yb, 10); yb -= 12; }
+    for (const ln of wrap(cityReg, maxTxtW, 10)) { draw(ln, PAD, yb, 10); yb -= 12; }
+
+    // Observaciones
+    draw("OBSERVACIONES:", PAD, yb, 10, true); yb -= 12;
+    for (const ln of wrap(notes, maxTxtW, 9)) { draw(ln, PAD, yb, 9); yb -= 11; }
+
+    // Cursor bajo la caja
     y = (boxTop - boxH) - mm(6);
 
-    // ===== Fin layout V2 =====
+    // Totales y orden
+    draw(`TOTAL: ${o.total.toLocaleString("es-CL")}`, PAD, mm(58), 11, true);
+    draw(`Orden: ${o.id}`, PAD, mm(50), 9);
 
-    // Totales y remitente en zona baja estable
-    draw(`TOTAL: ${o.total.toLocaleString("es-CL")}`, mm(6), mm(60), 11, true);
-    draw(`Orden: ${o.id}`, mm(6), mm(52), 9);
+    // Franja “FRÁGIL · PERFUMERÍA”
+    page.drawLine({ start: { x: mm(4), y: mm(36) }, end: { x: W - mm(4), y: mm(36) }, thickness: 1, color: rgb(0, 0, 0) });
+    draw("FRÁGIL · PERFUMERÍA · NO VOLCAR", PAD, mm(30), 10, true);
 
-    page.drawLine({ start: { x: mm(4), y: mm(28) }, end: { x: W - mm(4), y: mm(28) }, thickness: 1, color: rgb(0, 0, 0) });
-    draw("REMITENTE", mm(7), mm(22), 10, true);
-    draw(`${remitente} · ${remitAddr}`, mm(7), mm(14), 9);
+    // Remitente
+    page.drawLine({ start: { x: mm(4), y: mm(26) }, end: { x: W - mm(4), y: mm(26) }, thickness: 1, color: rgb(0, 0, 0) });
+    draw("REMITENTE", PAD, mm(20), 10, true);
+    for (const ln of wrap(`${remitente} · ${remitAddr}${remitTel ? ` · Tel. ${remitTel}` : ""}`, maxTxtW, 9)) {
+      draw(ln, PAD, y = y || mm(20), 9);
+      y -= 11;
+    }
+// Respuesta
+const pdfBytes = await pdf.save(); // Uint8Array
 
-    // Respuesta
-    const bytes = await pdf.save();
-    const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+// Copia a un ArrayBuffer puro (no SharedArrayBuffer)
+const ab = new ArrayBuffer(pdfBytes.length);
+new Uint8Array(ab).set(pdfBytes);
 
-    return new Response(ab, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="etiqueta_${tracking}.pdf"`,
-        "Cache-Control": "no-store",
-        "Content-Length": String(bytes.byteLength),
-      },
-    });
+return new NextResponse(ab, {
+  status: 200,
+  headers: {
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `inline; filename="etiqueta_${tracking}.pdf"`,
+    "Cache-Control": "no-store",
+    "X-Robots-Tag": "noindex",
+    "Content-Length": String(pdfBytes.length),
+  },
+});
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
