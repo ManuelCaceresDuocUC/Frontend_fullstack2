@@ -1,3 +1,4 @@
+// src/app/perfume/[id]/page.tsx
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import ProductGallery from "@/components/ProductGallery";
@@ -9,12 +10,12 @@ const S3_BASE = (process.env.S3_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_S3_BA
 const resolveImg = (s?: string | null) =>
   !s ? "" : /^https?:\/\//i.test(s) ? s : (S3_BASE ? `${S3_BASE}/${s.replace(/^\/+/, "")}` : s);
 
-export default async function Page({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
 
   const perfume = await prisma.perfume.findUnique({
     where: { id },
-    include: { variants: { where: { active: true }, orderBy: { ml: "asc" } } }, // ← Stock fuera
+    include: { variants: { where: { active: true }, orderBy: { ml: "asc" } } },
   });
   if (!perfume) notFound();
 
@@ -32,7 +33,6 @@ export default async function Page({ params }: { params: { id: string } }) {
           <h1 className="text-3xl font-extrabold">{perfume.brand} {perfume.name}</h1>
           <p className="mt-1 text-white/80">Frasco ref.: {perfume.ml} ml</p>
 
-          {/* Selector por ml con stock y botón */}
           <VariantSelector
             perfumeId={perfume.id}
             perfumeName={perfume.name}
