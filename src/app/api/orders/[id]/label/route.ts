@@ -85,11 +85,10 @@ export async function GET(_req: Request, context: unknown) {
 
     // QR arriba-derecha (más pequeño y más arriba)
     const qrImg = await pdf.embedPng(qrPng);
-    const qrSize = mm(28); // Achica el QR (antes mm(36))
+    const qrSize = mm(26); // Achica el QR (antes mm(36))
     const qrX = W - PAD - qrSize;
-    const qrY = H - PAD - qrSize + mm(10); // Sube el QR (antes H - PAD - qrSize)
+    const qrY = H - PAD - qrSize + mm(8); // Sube el QR (antes H - PAD - qrSize)
     page.drawImage(qrImg, { x: qrX, y: qrY, width: qrSize, height: qrSize });
-    draw("Escanea seguimiento", qrX, qrY - mm(5), 9); // Debajo del QR
 
     // Header izquierda
     draw(carrier, PAD, y, 14, true); y -= 18;
@@ -145,8 +144,7 @@ export async function GET(_req: Request, context: unknown) {
 
     // Totales y orden
     const yTotals = y;
-    draw(`TOTAL: ${o.total.toLocaleString("es-CL")}`, PAD, yTotals, 12, true);
-    draw(`Orden: ${o.id}`, PAD, yTotals - 14, 10);
+    
 
     // Franja FRÁGIL
     const yFrag = yTotals - mm(12);
