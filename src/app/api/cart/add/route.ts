@@ -1,6 +1,12 @@
+// src/app/api/cart/add/route.ts
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+
+const CK = "cart_v1";
 
 type Body = {
   productId?: string;
@@ -31,23 +37,27 @@ type CartCookieItem = {
   image: string | null;
 };
 
-const CK = "cart_v1";
+function isCartCookieItem(x: unknown): x is CartCookieItem {
+  if (typeof x !== "object" || x === null) return false;
+  const r = x as Record<string, unknown>;
+  return (
+    typeof r.productId === "string" &&
+    typeof r.variantId === "string" &&
+    typeof r.name === "string" &&
+    typeof r.brand === "string" &&
+    typeof r.ml === "number" &&
+    typeof r.unitPrice === "number" &&
+    typeof r.qty === "number" &&
+    (typeof r.image === "string" || r.image === null)
+  );
+}
 
 function parseCart(raw: string | undefined): CartCookieItem[] {
   if (!raw) return [];
   try {
-    const arr = JSON.parse(raw) as unknown;
-    if (!Array.isArray(arr)) return [];
-    return arr.filter((x): x is CartCookieItem =>
-      x && typeof x === "object" &&
-      typeof (x as any).productId === "string" &&
-      typeof (x as any).variantId === "string" &&
-      typeof (x as any).name === "string" &&
-      typeof (x as any).brand === "string" &&
-      typeof (x as any).ml === "number" &&
-      typeof (x as any).unitPrice === "number" &&
-      typeof (x as any).qty === "number"
-    );
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isCartCookieItem);
   } catch {
     return [];
   }
@@ -93,7 +103,7 @@ export async function POST(req: Request) {
     }
   }
 
-  // Legacy: si no hay variante en DB, calcula por frasco
+  // Legacy por frasco completo
   if (!variant && productId) {
     const p = await prisma.perfume.findUnique({
       where: { id: productId },
@@ -123,8 +133,7 @@ export async function POST(req: Request) {
 
   const idx = current.findIndex((x) => x.variantId === variant!.id);
   if (idx >= 0) {
-    const updatedQty = current[idx].qty + qty;
-    current[idx] = { ...current[idx], qty: updatedQty };
+    current[idx] = { ...current[idx], qty: current[idx].qty + qty };
   } else {
     current.push({
       productId: variant.perfumeId,
@@ -138,7 +147,7 @@ export async function POST(req: Request) {
     });
   }
 
-  const count = current.reduce<number>((a, b) => a + b.qty, 0);
+  const count = current.reduce((a, b) => a + b.qty, 0);
 
   const res = NextResponse.json({ ok: true, count }, { status: 200 });
   res.cookies.set(CK, JSON.stringify(current), {
