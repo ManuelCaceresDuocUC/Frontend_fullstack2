@@ -80,38 +80,38 @@ export async function GET(_req: Request, context: unknown) {
     page.drawRectangle({ x: mm(2), y: mm(2), width: W - mm(4), height: H - mm(4), borderColor: rgb(0, 0, 0), borderWidth: 1 });
 
     // Margen y cursor
-    const PAD = mm(6);
+    const PAD = mm(8); // Más margen
     let y = H - PAD;
 
-    // QR arriba-derecha
+    // QR arriba-derecha (más grande y separado)
     const qrImg = await pdf.embedPng(qrPng);
-    const qrSize = mm(30);
+    const qrSize = mm(36); // Más grande
     const qrX = W - PAD - qrSize;
     const qrY = H - PAD - qrSize;
     page.drawImage(qrImg, { x: qrX, y: qrY, width: qrSize, height: qrSize });
-    draw("Escanea seguimiento", qrX - mm(2), qrY - mm(3), 8);
+    draw("Escanea seguimiento", qrX, qrY - mm(5), 9); // Debajo del QR
 
     // Header izquierda
-    draw(carrier, PAD, y, 13, true); y -= 16;
-    draw(tracking, PAD, y, 24, true); y -= 28;
-    draw(new Intl.DateTimeFormat("es-CL", { dateStyle: "short", timeStyle: "short" }).format(o.createdAt), PAD, y, 9); y -= 12;
+    draw(carrier, PAD, y, 14, true); y -= 18;
+    draw(tracking, PAD, y, 22, true); y -= 26;
+    draw(new Intl.DateTimeFormat("es-CL", { dateStyle: "short", timeStyle: "short" }).format(o.createdAt), PAD, y, 10); y -= 14;
 
     // Separador
-    page.drawLine({ start: { x: PAD, y }, end: { x: W - PAD, y }, thickness: 0.8, color: rgb(0, 0, 0) });
-    y -= mm(4);
+    page.drawLine({ start: { x: PAD, y }, end: { x: W - PAD, y }, thickness: 1, color: rgb(0, 0, 0) });
+    y -= mm(6);
 
-    // Código de barras
+    // Código de barras (más espacio)
     const bcImg = await pdf.embedPng(barcodePng);
     const bcH = mm(18);
     const bcW = W - PAD * 2;
     page.drawImage(bcImg, { x: PAD, y: y - bcH, width: bcW, height: bcH });
-    y -= bcH + mm(3);
-    draw(tracking, PAD, y, 9); // texto pequeño bajo el barcode
-    y -= mm(5);
+    y -= bcH + mm(4);
+    draw(tracking, PAD, y, 10); // texto bajo el barcode
+    y -= mm(8);
 
-    // Caja destinatario
+    // Caja destinatario (más alta)
     const boxTop = y;
-    const boxH = mm(64);
+    const boxH = mm(72); // Más alto
     page.drawRectangle({
       x: PAD - mm(2),
       y: boxTop - boxH,
@@ -120,38 +120,41 @@ export async function GET(_req: Request, context: unknown) {
       borderColor: rgb(0, 0, 0),
       borderWidth: 1,
     });
-    let yb = boxTop - mm(6);
-    draw("DESTINATARIO", PAD, yb, 11, true); yb -= 14;
+    let yb = boxTop - mm(8);
+    draw("DESTINATARIO", PAD, yb, 12, true); yb -= 16;
 
-    draw(buyerName, PAD, yb, 12); yb -= 14;
+    // Nombre
+    draw(buyerName, PAD, yb, 13); yb -= 16;
 
+    // Dirección con wrap (fuente más pequeña si es largo)
     const maxTxtW = W - PAD * 2;
-    for (const ln of wrap(street, maxTxtW, 10)) { draw(ln, PAD, yb, 10); yb -= 12; }
-    for (const ln of wrap(cityReg, maxTxtW, 10)) { draw(ln, PAD, yb, 10); yb -= 12; }
+    for (const ln of wrap(street, maxTxtW, 11)) { draw(ln, PAD, yb, 11); yb -= 13; }
+    for (const ln of wrap(cityReg, maxTxtW, 11)) { draw(ln, PAD, yb, 11); yb -= 13; }
 
-    draw("OBSERVACIONES:", PAD, yb, 10, true); yb -= 12;
-    for (const ln of wrap(notes, maxTxtW, 9)) { draw(ln, PAD, yb, 9); yb -= 11; }
+    // Observaciones
+    draw("OBSERVACIONES:", PAD, yb, 11, true); yb -= 13;
+    for (const ln of wrap(notes, maxTxtW, 10)) { draw(ln, PAD, yb, 10); yb -= 12; }
 
     // Cursor bajo la caja
-    y = (boxTop - boxH) - mm(8);
+    y = (boxTop - boxH) - mm(10);
 
     // Totales y orden
     const yTotals = y;
-    draw(`TOTAL: ${o.total.toLocaleString("es-CL")}`, PAD, yTotals, 11, true);
-    draw(`Orden: ${o.id}`, PAD, yTotals - 12, 9);
+    draw(`TOTAL: ${o.total.toLocaleString("es-CL")}`, PAD, yTotals, 12, true);
+    draw(`Orden: ${o.id}`, PAD, yTotals - 14, 10);
 
     // Franja FRÁGIL
-    const yFrag = yTotals - mm(10);
-    page.drawLine({ start: { x: mm(4), y: yFrag }, end: { x: W - mm(4), y: yFrag }, thickness: 1, color: rgb(0,0,0) });
-    draw("FRÁGIL · PERFUMERÍA · NO VOLCAR", PAD, yFrag - 6, 10, true);
+    const yFrag = yTotals - mm(12);
+    page.drawLine({ start: { x: mm(4), y: yFrag }, end: { x: W - mm(4), y: yFrag }, thickness: 1.2, color: rgb(0,0,0) });
+    draw("FRÁGIL · PERFUMERÍA · NO VOLCAR", PAD, yFrag - 8, 11, true);
 
     // Remitente
-    const yRemTitle = yFrag - mm(14);
-    draw("REMITENTE", PAD, yRemTitle, 10, true);
-    let yRem = yRemTitle - 12;
-    for (const ln of wrap(`${remitente} · ${remitAddr}${remitTel ? ` · Tel. ${remitTel}` : ""}`, W - PAD*2, 9)) {
-      draw(ln, PAD, yRem, 9);
-      yRem -= 11;
+    const yRemTitle = yFrag - mm(16);
+    draw("REMITENTE", PAD, yRemTitle, 11, true);
+    let yRem = yRemTitle - 14;
+    for (const ln of wrap(`${remitente} · ${remitAddr}${remitTel ? ` · Tel. ${remitTel}` : ""}`, W - PAD*2, 10)) {
+      draw(ln, PAD, yRem, 10);
+      yRem -= 12;
     }
 
     // Respuesta (sin problemas de tipos)
