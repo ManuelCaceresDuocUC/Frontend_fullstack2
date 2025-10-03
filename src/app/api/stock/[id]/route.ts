@@ -5,13 +5,24 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/* ===== Utilidades sin any ===== */
+/* ===== helpers sin any ===== */
 type Dict = Record<string, unknown>;
 const isDict = (v: unknown): v is Dict => typeof v === "object" && v !== null;
 const num = (o: Dict, k: string): number | undefined =>
   typeof o[k] === "number" && Number.isFinite(o[k] as number) ? (o[k] as number) : undefined;
 
-/* ===== Tipos de body ===== */
+function getParams(ctx: unknown): { id: string } {
+  if (typeof ctx === "object" && ctx !== null && "params" in ctx) {
+    const p = (ctx as Record<string, unknown>).params;
+    if (typeof p === "object" && p !== null && "id" in (p as Record<string, unknown>)) {
+      const id = (p as Record<string, unknown>).id;
+      if (typeof id === "string") return { id };
+    }
+  }
+  throw new Error("Route context inválido");
+}
+
+/* ===== tipos de body ===== */
 type PatchSingle = { ml: number; stock: number };
 type PatchBatch = { ml3?: number; ml5?: number; ml10?: number };
 
@@ -33,8 +44,8 @@ const isPatchBatch = (b: unknown): b is PatchBatch => {
 type VariantOut = { id: string; ml: number; stock: number; price: number; active: boolean };
 
 /* ===== GET: variantes por perfume ===== */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const { id: perfumeId } = params;
+export async function GET(_req: Request, ctx: unknown) {
+  const { id: perfumeId } = getParams(ctx);
   const variants = await prisma.perfumeVariant.findMany({
     where: { perfumeId },
     select: { id: true, ml: true, price: true, stock: true, active: true },
@@ -44,8 +55,8 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 /* ===== PATCH: { ml, stock } o { ml3?, ml5?, ml10? } ===== */
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const { id: perfumeId } = params;
+export async function PATCH(req: Request, ctx: unknown) {
+  const { id: perfumeId } = getParams(ctx);
 
   let bodyUnknown: unknown = null;
   try {
@@ -54,16 +65,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ ok: false, error: "JSON inválido" }, { status: 400 });
   }
 
-  // Caso 1: actualizar una sola variante
+  // una sola variante
   if (isPatchSingle(bodyUnknown)) {
     const { ml, stock } = bodyUnknown;
     if (ml <= 0 || stock < 0) {
       return NextResponse.json({ ok: false, error: "Datos inválidos" }, { status: 400 });
     }
-
     try {
+      // requiere @@unique([perfumeId, ml]) en PerfumeVariant (ya lo tienes)
       const variant = await prisma.perfumeVariant.upsert({
-        // Requiere @@unique([perfumeId, ml], name: "perfumeId_ml") en el schema
         where: { perfumeId_ml: { perfumeId, ml } },
         update: { stock },
         create: { perfumeId, ml, price: 0, stock, active: true },
@@ -75,11 +85,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
   }
 
-  // Caso 2: actualizar 3/5/10 ml de una
+  // batch 3/5/10 ml
   if (isPatchBatch(bodyUnknown)) {
     const b = bodyUnknown as PatchBatch;
-
-    // Construye pares ml-stock válidos
     const updates: Array<{ ml: 3 | 5 | 10; stock: number }> = [];
     if (typeof b.ml3 === "number") updates.push({ ml: 3, stock: b.ml3 });
     if (typeof b.ml5 === "number") updates.push({ ml: 5, stock: b.ml5 });
@@ -93,7 +101,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     }
 
     try {
-      // Usa callback para evitar el error TS2769 (PrismaPromise vs Promise)
       const variants: VariantOut[] = [];
       await prisma.$transaction(async (tx) => {
         for (const u of updates) {
