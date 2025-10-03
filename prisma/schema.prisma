@@ -14,14 +14,14 @@ enum Genero {
   UNISEX
 }
 
-enum Perfume_category {
+enum PerfumeCategory {
   NICHO
   ARABES
   DISENADOR
   OTROS
 }
 
-enum User_role {
+enum UserRole {
   USER
   ADMIN
 }
@@ -60,9 +60,8 @@ model Dte {
   orderId String @unique
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
-  tipo  Int
-  folio Int
-
+  tipo      Int
+  folio     Int
   ted       String
   xml       Bytes
   trackId   String?
@@ -78,51 +77,59 @@ model Dte {
 }
 
 model Perfume {
-  id          String  @id @default(cuid())
+  id          String          @id @default(cuid())
   name        String
   brand       String
-  ml          Int
-  price       Int
+  ml          Int // frasco base (referencia)
+  price       Int // precio frasco base (referencia)
   images      Json?
   createdBy   String?
-  createdAt   DateTime @default(now())
-  description String?  @db.Text
-  genero      Genero   @default(UNISEX)
-  isDecant    Boolean  @default(false)
-  tipo        Perfume_category
-  updatedAt   DateTime @updatedAt
-  Stock       Stock?
-  OrderItem   OrderItem[]
+  createdAt   DateTime        @default(now())
+  description String?         @db.Text
+  genero      Genero          @default(UNISEX)
+  isDecant    Boolean         @default(false)
+  tipo        PerfumeCategory
+  updatedAt   DateTime        @updatedAt
 
-  // NUEVO
-  price3      Int?     // CLP 3 ml
-  price5      Int?     // CLP 5 ml
-  price10     Int?     // CLP 10 ml
+  variants  PerfumeVariant[] // stock/precio reales por ml
+  OrderItem OrderItem[]
 
   @@index([genero, tipo, isDecant])
 }
 
-model Stock {
+model PerfumeVariant {
   id        String  @id @default(cuid())
-  perfumeId String  @unique
-  qty       Int     @default(0)
+  perfumeId String
   perfume   Perfume @relation(fields: [perfumeId], references: [id], onDelete: Cascade)
+
+  ml     Int // 3 | 5 | 10 | etc.
+  price  Int // CLP
+  stock  Int     @default(0) // unidades
+  sku    String? @unique
+  active Boolean @default(true)
+
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  OrderItem OrderItem[]
+
+  @@unique([perfumeId, ml])
+  @@index([active, ml])
 }
 
 model User {
-  id             String    @id @default(cuid())
-  email          String    @unique
+  id             String   @id @default(cuid())
+  email          String   @unique
   name           String?
   image          String?
-  role           User_role @default(USER)
-  createdAt      DateTime  @default(now())
-  passwordHash   String    @default("")
-  phone          String?   @default("")
-  shippingCity   String    @default("")
-  shippingNotes  String    @default("")
-  shippingRegion String    @default("")
-  shippingStreet String    @default("")
-  shippingZip    String    @default("")
+  role           UserRole @default(USER)
+  createdAt      DateTime @default(now())
+  passwordHash   String   @default("")
+  phone          String?  @default("")
+  shippingCity   String   @default("")
+  shippingNotes  String   @default("")
+  shippingRegion String   @default("")
+  shippingStreet String   @default("")
+  shippingZip    String   @default("")
 }
 
 model Order {
@@ -146,7 +153,7 @@ model Order {
   items    OrderItem[]
   payment  Payment?
   shipment Shipment?
-  dte      Dte? // back-relation
+  dte      Dte?
 
   @@index([status])
   @@index([createdAt])
@@ -157,16 +164,20 @@ model OrderItem {
   id        String  @id @default(cuid())
   orderId   String
   perfumeId String
+  variantId String? // nullable para órdenes antiguas
   name      String
   brand     String
   ml        Int
   unitPrice Int
   qty       Int
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  perfume   Perfume @relation(fields: [perfumeId], references: [id], onDelete: Cascade)
+
+  order   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  perfume Perfume         @relation(fields: [perfumeId], references: [id], onDelete: Cascade)
+  variant PerfumeVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@index([orderId], map: "order_items_orderId_fkey")
   @@index([perfumeId], map: "order_items_perfumeId_fkey")
+  @@index([variantId])
   @@map("order_items")
 }
 
