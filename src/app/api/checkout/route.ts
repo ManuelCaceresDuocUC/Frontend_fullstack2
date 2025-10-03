@@ -1,177 +1,161 @@
-// app/api/checkout/route.ts
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { createMPPreference, type MPItem } from "@/lib/payments/mercadopago";
-import { createWebpayTx } from "@/lib/payments/webpay";
-import { createVentiSession } from "@/lib/payments/venti";
-import { quoteShipping } from "@/lib/shipping";
-
+// src/app/api/checkout/route.ts
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type CartItem = { id: string; qty: number };
-type Address = { street?: string; city?: string; region?: string; zip?: string; notes?: string };
-type PaymentMethod = "MERCADOPAGO" | "WEBPAY" | "VENTIPAY" | "MANUAL";
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
 
-type CheckoutPayload = {
+const CK = "cart_v1";
+
+type CartCookieItem = {
+  productId: string;      // Perfume.id
+  variantId: string;      // PerfumeVariant.id | LEGACY-...
+  name: string;
+  brand: string;
+  ml: number;
+  unitPrice: number;      // CLP
+  qty: number;
+  image: string | null;
+};
+
+type CheckoutBody = {
   email: string;
   buyerName: string;
   phone?: string;
-  address?: Address;
-  items: CartItem[];
-  paymentMethod: PaymentMethod;
+  shippingStreet?: string;
+  shippingCity?: string;
+  shippingRegion?: string;
+  shippingZip?: string;
+  shippingNotes?: string;
+  shippingFee?: number;                 // opcional, si no se manda se calcula simple
+  paymentMethod?: "WEBPAY" | "MANUAL" | "SERVIPAG";
 };
 
-type PerfumeRow = { id: string; name: string; brand: string; ml: number; price: number };
+function isCartCookieItem(x: unknown): x is CartCookieItem {
+  if (typeof x !== "object" || x === null) return false;
+  const r = x as Record<string, unknown>;
+  return (
+    typeof r.productId === "string" &&
+    typeof r.variantId === "string" &&
+    typeof r.name === "string" &&
+    typeof r.brand === "string" &&
+    typeof r.ml === "number" &&
+    typeof r.unitPrice === "number" &&
+    typeof r.qty === "number" &&
+    (typeof r.image === "string" || r.image === null)
+  );
+}
 
-const fmtErr = (msg: string, code = 400) => NextResponse.json({ error: msg }, { status: code });
+function parseCart(raw?: string): CartCookieItem[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isCartCookieItem);
+  } catch {
+    return [];
+  }
+}
+
+const safeInt = (n: number) => Math.max(0, Math.trunc(n));
 
 export async function POST(req: Request) {
+  const body = (await req.json()) as CheckoutBody;
+
+  // 1) Cargar carrito desde cookie
+  const jar = await cookies();
+  const items = parseCart(jar.get(CK)?.value);
+  if (items.length === 0) {
+    return NextResponse.json({ error: "carrito_vacio" }, { status: 400 });
+  }
+
+  // 2) Totales
+  const subtotal = items.reduce((s, it) => s + safeInt(it.unitPrice) * safeInt(it.qty), 0);
+  const region = body.shippingRegion ?? "";
+  const fallbackShip = region === "Valparaíso" ? 2000 : 3990;   // regla simple
+  const shippingFee = typeof body.shippingFee === "number" ? safeInt(body.shippingFee) : fallbackShip;
+  const total = subtotal + shippingFee;
+
+  // 3) Descuento de stock y creación de orden en una transacción
   try {
-    const body = (await req.json()) as CheckoutPayload;
-    const { email, buyerName, phone, address, items, paymentMethod } = body;
+    const result = await prisma.$transaction(async (tx) => {
+      // 3.a) Mapear necesidad por variante real (ignora LEGACY)
+      const needByVariant = items
+        .filter((i) => i.variantId && !i.variantId.startsWith("LEGACY"))
+        .reduce<Record<string, number>>((acc, i) => {
+          acc[i.variantId] = (acc[i.variantId] ?? 0) + safeInt(i.qty);
+          return acc;
+        }, {});
 
-    if (!email || !buyerName) return fmtErr("email y buyerName requeridos");
-    if (!Array.isArray(items) || items.length === 0) return fmtErr("items vacíos");
-    if (!paymentMethod) return fmtErr("paymentMethod requerido");
-
-    // Dirección mínima para calcular envío
-    const street = String(address?.street ?? "").trim();
-    const region = String(address?.region ?? "").trim();
-    const comuna = String(address?.city ?? "").trim();
-    if (!street || !region || !comuna) return fmtErr("Dirección incompleta");
-
-    // Catálogo
-    const ids = items.map((it) => it.id);
-    const perfumes: PerfumeRow[] = await prisma.perfume.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, name: true, brand: true, ml: true, price: true },
-    });
-
-    const itemsData = items.map((it) => {
-      const p = perfumes.find((pp) => pp.id === it.id);
-      if (!p) throw new Error(`Perfume ${it.id} no existe`);
-      return {
-        perfumeId: p.id,
-        name: p.name,
-        brand: p.brand,
-        ml: p.ml,
-        unitPrice: p.price,
-        qty: it.qty,
-      };
-    });
-
-    const subtotal = itemsData.reduce((sum, it) => sum + it.unitPrice * it.qty, 0);
-
-    // Envío
-    const q = quoteShipping({ region, comuna, subtotal });
-    if ("error" in q) return fmtErr(q.error);
-    const shippingFee = q.cost;
-    const total = subtotal + shippingFee;
-
-    // Método de pago para DB (enum actual: WEBPAY | SERVIPAG | MANUAL)
-    const methodForDb: "WEBPAY" | "SERVIPAG" | "MANUAL" =
-      paymentMethod === "WEBPAY" ? "WEBPAY" : "MANUAL";
-
-    // Necesidad por perfume
-    const needById = items.reduce<Record<string, number>>((acc, it) => {
-      acc[it.id] = (acc[it.id] ?? 0) + it.qty;
-      return acc;
-    }, {});
-
-    // Transacción: descuenta stock y crea orden
-    const created = await prisma.$transaction(async (tx) => {
+      // 3.b) Descontar stock de manera atómica
       const updates = await Promise.all(
-        Object.entries(needById).map(([perfumeId, need]) =>
-          tx.stock.updateMany({
-            where: { perfumeId, qty: { gte: need } },
-            data: { qty: { decrement: need } },
+        Object.entries(needByVariant).map(([variantId, need]) =>
+          tx.perfumeVariant.updateMany({
+            where: { id: variantId, stock: { gte: need } },
+            data: { stock: { decrement: need } },
           })
         )
       );
-      const failed = updates.find((u) => u.count === 0);
-      if (failed) throw new Error("Sin stock suficiente para uno o más productos.");
+      if (updates.some((u) => u.count !== 1)) {
+        throw new Error("stock_insuficiente");
+      }
 
+      // 3.c) Crear Order + OrderItems + Payment
       const order = await tx.order.create({
         data: {
-          email,
-          buyerName,
-          phone: phone ?? "",
-          shippingStreet: street,
-          shippingCity: comuna,
+          email: body.email,
+          buyerName: body.buyerName,
+          phone: body.phone ?? "",
+          shippingStreet: body.shippingStreet ?? "",
+          shippingCity: body.shippingCity ?? "",
           shippingRegion: region,
-          shippingZip: address?.zip ?? "",
-          shippingNotes: address?.notes ?? "",
+          shippingZip: body.shippingZip ?? "",
+          shippingNotes: body.shippingNotes ?? "",
           subtotal,
           shippingFee,
           total,
-          status: "PENDING",
-          items: { create: itemsData },
+          // items
+          items: {
+            create: items.map((it) => ({
+              perfumeId: it.productId,
+              variantId: it.variantId.startsWith("LEGACY") ? null : it.variantId,
+              name: it.name,
+              brand: it.brand,
+              ml: safeInt(it.ml),
+              unitPrice: safeInt(it.unitPrice),
+              qty: safeInt(it.qty),
+            })),
+          },
+          // payment
           payment: {
             create: {
-              method: methodForDb,
-              status: "INITIATED",
+              method: (body.paymentMethod ?? "WEBPAY") as any,
               amount: total,
             },
           },
+          // shipment placeholder
+          shipment: {
+            create: {
+              carrier: region === "Valparaíso" ? "Despacho propio" : "Bluexpress",
+            },
+          },
         },
-        select: { id: true },
+        select: { id: true, total: true },
       });
 
       return order;
     });
 
-    // Env obligatoria
-    const APP_BASE_URL = process.env.APP_BASE_URL;
-    if (!APP_BASE_URL) return fmtErr("APP_BASE_URL no configurada", 500);
-
-    // Crear transacción con proveedor
-    let redirectUrl: string | undefined;
-
-    switch (paymentMethod) {
-      case "MERCADOPAGO": {
-        const mpItems: MPItem[] = itemsData.map((i) => ({
-          title: `${i.brand} ${i.name}`,
-          quantity: i.qty,
-          unit_price: i.unitPrice,
-          currency_id: "CLP",
-        }));
-        const pref = await createMPPreference({
-          orderId: created.id,
-          items: mpItems,
-          returnUrl: `${APP_BASE_URL}/pago/mercadopago/retorno`,
-          webhookUrl: `${APP_BASE_URL}/api/webhooks/mercadopago`,
-        });
-        redirectUrl = pref.init_point;
-        break;
-      }
-      case "WEBPAY": {
-        const { token, url } = await createWebpayTx({
-          orderId: created.id,
-          total,
-          returnUrl: `${APP_BASE_URL}/pago/webpay/retorno`,
-        });
-        redirectUrl = `${url}?token_ws=${token}`;
-        break;
-      }
-      case "VENTIPAY": {
-        const { url } = await createVentiSession({
-          orderId: created.id,
-          total,
-          returnUrl: `${APP_BASE_URL}/pago/venti/retorno`,
-          webhookUrl: `${APP_BASE_URL}/api/webhooks/venti`,
-        });
-        redirectUrl = url;
-        break;
-      }
-      case "MANUAL":
-        // Sin redirección
-        break;
+    // 4) Limpiar cookie y responder
+    const res = NextResponse.json({ ok: true, orderId: result.id, total: result.total });
+    res.cookies.set(CK, "", { path: "/", maxAge: 0 });
+    return res;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "error";
+    if (msg === "stock_insuficiente") {
+      return NextResponse.json({ error: "stock_insuficiente" }, { status: 409 });
     }
-
-    return NextResponse.json({ id: created.id, redirectUrl });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
