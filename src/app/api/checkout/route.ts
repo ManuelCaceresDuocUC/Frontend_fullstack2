@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { PaymentMethod } from "@prisma/client";
 
 const CK = "cart_v1";
 
@@ -28,7 +29,7 @@ type CheckoutBody = {
   shippingRegion?: string;
   shippingZip?: string;
   shippingNotes?: string;
-  shippingFee?: number;                 // opcional, si no se manda se calcula simple
+  shippingFee?: number;
   paymentMethod?: "WEBPAY" | "MANUAL" | "SERVIPAG";
 };
 
@@ -60,6 +61,18 @@ function parseCart(raw?: string): CartCookieItem[] {
 
 const safeInt = (n: number) => Math.max(0, Math.trunc(n));
 
+function toPaymentMethod(s?: string): PaymentMethod {
+  switch (s) {
+    case "MANUAL":
+      return PaymentMethod.MANUAL;
+    case "SERVIPAG":
+      return PaymentMethod.SERVIPAG;
+    case "WEBPAY":
+    default:
+      return PaymentMethod.WEBPAY;
+  }
+}
+
 export async function POST(req: Request) {
   const body = (await req.json()) as CheckoutBody;
 
@@ -73,14 +86,14 @@ export async function POST(req: Request) {
   // 2) Totales
   const subtotal = items.reduce((s, it) => s + safeInt(it.unitPrice) * safeInt(it.qty), 0);
   const region = body.shippingRegion ?? "";
-  const fallbackShip = region === "Valparaíso" ? 2000 : 3990;   // regla simple
+  const fallbackShip = region === "Valparaíso" ? 2000 : 3990;
   const shippingFee = typeof body.shippingFee === "number" ? safeInt(body.shippingFee) : fallbackShip;
   const total = subtotal + shippingFee;
 
-  // 3) Descuento de stock y creación de orden en una transacción
+  // 3) Transacción: descontar stock y crear orden
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // 3.a) Mapear necesidad por variante real (ignora LEGACY)
+      // 3.a) Necesidad por variante real
       const needByVariant = items
         .filter((i) => i.variantId && !i.variantId.startsWith("LEGACY"))
         .reduce<Record<string, number>>((acc, i) => {
@@ -88,7 +101,7 @@ export async function POST(req: Request) {
           return acc;
         }, {});
 
-      // 3.b) Descontar stock de manera atómica
+      // 3.b) Descuento atómico
       const updates = await Promise.all(
         Object.entries(needByVariant).map(([variantId, need]) =>
           tx.perfumeVariant.updateMany({
@@ -101,7 +114,7 @@ export async function POST(req: Request) {
         throw new Error("stock_insuficiente");
       }
 
-      // 3.c) Crear Order + OrderItems + Payment
+      // 3.c) Crear Order + Items + Payment + Shipment
       const order = await tx.order.create({
         data: {
           email: body.email,
@@ -115,7 +128,6 @@ export async function POST(req: Request) {
           subtotal,
           shippingFee,
           total,
-          // items
           items: {
             create: items.map((it) => ({
               perfumeId: it.productId,
@@ -127,14 +139,12 @@ export async function POST(req: Request) {
               qty: safeInt(it.qty),
             })),
           },
-          // payment
           payment: {
             create: {
-              method: (body.paymentMethod ?? "WEBPAY") as any,
+              method: toPaymentMethod(body.paymentMethod),
               amount: total,
             },
           },
-          // shipment placeholder
           shipment: {
             create: {
               carrier: region === "Valparaíso" ? "Despacho propio" : "Bluexpress",
