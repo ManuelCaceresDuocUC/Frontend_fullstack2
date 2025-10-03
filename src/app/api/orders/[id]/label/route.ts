@@ -83,11 +83,11 @@ export async function GET(_req: Request, context: unknown) {
     const PAD = mm(8); // Más margen
     let y = H - PAD;
 
-    // QR arriba-derecha (más grande y separado)
+    // QR arriba-derecha (más pequeño y más arriba)
     const qrImg = await pdf.embedPng(qrPng);
-    const qrSize = mm(36); // Más grande
+    const qrSize = mm(28); // Achica el QR (antes mm(36))
     const qrX = W - PAD - qrSize;
-    const qrY = H - PAD - qrSize;
+    const qrY = H - PAD - qrSize + mm(10); // Sube el QR (antes H - PAD - qrSize)
     page.drawImage(qrImg, { x: qrX, y: qrY, width: qrSize, height: qrSize });
     draw("Escanea seguimiento", qrX, qrY - mm(5), 9); // Debajo del QR
 
@@ -134,6 +134,11 @@ export async function GET(_req: Request, context: unknown) {
     // Observaciones
     draw("OBSERVACIONES:", PAD, yb, 11, true); yb -= 13;
     for (const ln of wrap(notes, maxTxtW, 10)) { draw(ln, PAD, yb, 10); yb -= 12; }
+
+    // Totales y orden (dentro del cuadro)
+    yb -= 8; // Espacio extra debajo de observaciones
+    draw(`TOTAL: ${o.total.toLocaleString("es-CL")}`, PAD, yb, 12, true); yb -= 16;
+    draw(`Orden: ${o.id}`, PAD, yb, 10); yb -= 12;
 
     // Cursor bajo la caja
     y = (boxTop - boxH) - mm(10);
