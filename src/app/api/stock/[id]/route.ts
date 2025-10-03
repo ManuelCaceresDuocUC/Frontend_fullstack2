@@ -1,49 +1,73 @@
 // src/app/api/stock/[id]/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Body = { qty?: number };
-type DeltaBody = { delta?: number };
-
-function getId(ctx: unknown): string | undefined {
-  if (typeof ctx !== "object" || ctx === null) return;
-  const params = (ctx as { params?: unknown }).params;
-  if (typeof params !== "object" || params === null) return;
-  const id = (params as Record<string, unknown>).id;
-  return typeof id === "string" ? id : undefined;
+/** GET /api/stock/[id]  -> id = perfumeId */
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const variants = await prisma.perfumeVariant.findMany({
+    where: { perfumeId: id },
+    select: { id: true, ml: true, price: true, stock: true, active: true },
+    orderBy: { ml: "asc" },
+  });
+  return NextResponse.json({ perfumeId: id, variants });
 }
 
-export async function PUT(req: Request, ctx: unknown) {
-  const id = getId(ctx);
-  if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
+/**
+ * PATCH /api/stock/[id]  -> id = perfumeId
+ * Body:
+ *  - { variantId?: string; ml?: number; stock?: number }   // set absoluto
+ *  - { variantId?: string; ml?: number; delta?: number }   // incremento/decremento
+ */
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: perfumeId } = await params;
+  const b = (await req.json()) as {
+    variantId?: string;
+    ml?: number;
+    stock?: number;
+    delta?: number;
+  };
 
-  const { qty } = (await req.json()) as Body;
-  if (!Number.isFinite(qty)) return NextResponse.json({ error: "qty inválido" }, { status: 400 });
+  if (!b.variantId && typeof b.ml !== "number") {
+    return NextResponse.json({ error: "faltan variantId o ml" }, { status: 400 });
+  }
 
-  const r = await prisma.stock.upsert({
-    where: { perfumeId: id },
-    update: { qty: Number(qty) },
-    create: { perfumeId: id, qty: Number(qty) },
-  });
-  return NextResponse.json({ ok: true, qty: r.qty });
-}
+  // Tipamos el where para evitar 'any'
+  const where: Prisma.PerfumeVariantWhereUniqueInput = b.variantId
+    ? { id: b.variantId }
+    : { perfumeId_ml: { perfumeId, ml: Number(b.ml) } };
 
-export async function PATCH(req: Request, ctx: unknown) {
-  const id = getId(ctx);
-  if (!id) return NextResponse.json({ error: "id requerido" }, { status: 400 });
+  // set absoluto
+  if (typeof b.stock === "number") {
+    const v = await prisma.perfumeVariant.update({
+      where,
+      data: { stock: Math.max(0, Math.trunc(b.stock)) },
+      select: { id: true, ml: true, stock: true },
+    });
+    return NextResponse.json({ ok: true, variant: v });
+  }
 
-  const { delta } = (await req.json()) as DeltaBody;
-  if (!Number.isFinite(delta)) return NextResponse.json({ error: "delta inválido" }, { status: 400 });
+  // incremento/decremento
+  if (typeof b.delta === "number" && Number.isFinite(b.delta)) {
+    const v = await prisma.perfumeVariant.update({
+      where,
+      data: { stock: { increment: Math.trunc(b.delta) } },
+      select: { id: true, ml: true, stock: true },
+    });
+    if (v.stock < 0) {
+      const fixed = await prisma.perfumeVariant.update({
+        where: { id: v.id },
+        data: { stock: 0 },
+        select: { id: true, ml: true, stock: true },
+      });
+      return NextResponse.json({ ok: true, variant: fixed });
+    }
+    return NextResponse.json({ ok: true, variant: v });
+  }
 
-  const cur = await prisma.stock.upsert({
-    where: { perfumeId: id },
-    update: {},
-    create: { perfumeId: id, qty: 0 },
-  });
-  const next = Math.max(0, (cur.qty ?? 0) + Number(delta));
-  const r = await prisma.stock.update({ where: { perfumeId: id }, data: { qty: next } });
-  return NextResponse.json({ ok: true, qty: r.qty });
+  return NextResponse.json({ error: "body inválido" }, { status: 400 });
 }

@@ -18,17 +18,16 @@ const toKey = (s: string) => {
 
 // Nota: NO tipar estrictamente el segundo arg. Usa `any` para evitar el fallo del validador de Next.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function DELETE(_req: NextRequest, { params }: any) {
-  const { id } = params as { id: string };
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
 
-  const p = await prisma.perfume.findUnique({ where: { id } });
-  if (!p) return NextResponse.json({ error: "not found" }, { status: 404 });
-
-  const keys = arr(p.images as unknown).map(toKey).filter(Boolean);
-  try { if (keys.length) await deleteMany(keys); } catch {}
+  // opcional: validar existencia
+  const exists = await prisma.perfume.findUnique({ where: { id }, select: { id: true } });
+  if (!exists) return NextResponse.json({ error: "No existe" }, { status: 404 });
 
   await prisma.$transaction(async (tx) => {
-    await tx.stock.deleteMany({ where: { perfumeId: id } });
+    // Antes borrábamos tx.stock.deleteMany; ahora son variantes
+    await tx.perfumeVariant.deleteMany({ where: { perfumeId: id } });
     await tx.perfume.delete({ where: { id } });
   });
 
