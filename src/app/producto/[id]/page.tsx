@@ -1,127 +1,85 @@
-// app/producto/[id]/page.tsx
-import { headers } from "next/headers";
+// app/perfume/[id]/page.tsx
 import { notFound } from "next/navigation";
-import Link from "next/link";
-import type { Vehiculo } from "@/types/vehiculo";
-import ProductMedia from "@/components/ProductMedia";
+import { prisma } from "@/lib/prisma";
+import ProductGallery from "@/components/ProductGallery";
+import AddToCartButton from "@/components/AddToCartButton";
 
 export const dynamic = "force-dynamic";
 
-type ApiVehiculo = Vehiculo;
-type ApiError = { error: string };
+const S3_BASE = (process.env.S3_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_S3_BASE ?? "").replace(/\/+$/, "");
+const resolveImg = (s?: string | null) =>
+  !s ? "" : /^https?:\/\//i.test(s) ? s : (S3_BASE ? `${S3_BASE}/${s.replace(/^\/+/, "")}` : s);
 
-async function getVehiculo(id: string): Promise<Vehiculo | null> {
-  const h = await headers(); // <- aquí
-  const host = h.get("host")!;
-  const proto =
-    h.get("x-forwarded-proto") ??
-    (process.env.NODE_ENV === "production" ? "https" : "http");
+const fmt = (n: number) =>
+  n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
-  const url = `${proto}://${host}/api/perfumes?id=${encodeURIComponent(id)}`;
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) return null;
-  const data = (await res.json()) as ApiVehiculo | ApiError;
-  if ("error" in data) return null;
-  return data;
-}
+export default async function Page({ params }: { params: { id: string } }) {
+  const { id } = params;
 
+  const p = await prisma.perfume.findUnique({
+    where: { id },
+    include: {
+      variants: {
+        where: { active: true },
+        select: { id: true, ml: true, price: true, stock: true },
+        orderBy: { ml: "asc" },
+      },
+    },
+  });
+  if (!p) notFound();
 
-export default async function ProductoPage(
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
-  const v = await getVehiculo(id);
-  if (!v) notFound();
-
-  const images = Array.isArray(v.imagenes) && v.imagenes.length ? v.imagenes : [v.imagen];
+  const imgs = Array.isArray(p.images) ? (p.images as unknown as string[]) : [];
+  const imageUrl = imgs[0] ? resolveImg(imgs[0]) : null;
+  const gallery = imgs.map(resolveImg).filter(Boolean);
+  const fallback = S3_BASE
+    ? `${S3_BASE}/placeholders/placeholder-4x5.webp`
+    : "https://via.placeholder.com/1200x1500?text=Imagen";
 
   return (
-    <main className="pt-28 md:pt-36 pb-28 md:pb-40 bg-neutral-50 min-h-screen">
-      <div className="px-6 md:px-10 max-w-7xl mx-auto pt-4 pb-7">
-        <nav className="mb-5 text-sm text-neutral-600">
-          <Link href="/galeria" className="hover:underline">← Volver a galería</Link>
-        </nav>
+    <main className="min-h-[70vh] px-4 py-8">
+      <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-8">
+        <ProductGallery images={gallery} alt={`${p.brand} ${p.name}`} fallback={fallback} />
 
-        <header className="mb-6">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-            {v.marca} {v.modelo}
-          </h1>
-          <p className="text-neutral-600 mt-1">
-            {v.anio} · {v.transmision} · {v.combustible}
-          </p>
-        </header>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h1 className="text-3xl font-extrabold">{p.brand} {p.name}</h1>
 
-        <div className="grid gap-10 lg:grid-cols-5">
-          <section className="lg:col-span-3">
-            <ProductMedia images={images} title={`${v.marca} ${v.modelo}`} />
-          </section>
-
-          <aside className="lg:col-span-2">
-            <div className="sticky top-28 space-y-6 rounded-2xl border bg-white p-6 md:p-8 shadow-sm">
-              <div>
-                <div className="text-3xl font-extrabold text-emerald-700">
-                  ${v.precio.toLocaleString("es-CL")}
+          {/* variantes 3/5/10 ml desde DB */}
+          <div className="mt-4 space-y-3">
+            {p.variants.map((v) => (
+              <div key={v.id} className="flex items-center justify-between rounded-xl border border-slate-200 p-3">
+                <div>
+                  <div className="font-semibold">{v.ml} ml</div>
+                  <div className="text-slate-600">{fmt(v.price)}</div>
+                  <div className="text-sm text-slate-600">
+                    Stock: {v.stock} {v.stock === 0 && "(sin stock)"}
+                  </div>
                 </div>
-                <p className="text-xs text-neutral-500 mt-1">Precio referencial en CLP</p>
+
+                <AddToCartButton
+                  productId={p.id}
+                  variantId={v.id}
+                  name={p.name}
+                  brand={p.brand}
+                  ml={v.ml}
+                  price={v.price}
+                  image={imageUrl}
+                  stock={v.stock}
+                />
               </div>
+            ))}
+          </div>
 
-              <dl className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <dt className="text-neutral-500">Año</dt>
-                  <dd className="font-medium">{v.anio}</dd>
-                </div>
-                <div>
-                  <dt className="text-neutral-500">Tipo</dt>
-                  <dd className="font-medium">{v.tipo}</dd>
-                </div>
-                <div>
-                  <dt className="text-neutral-500">Transmisión</dt>
-                  <dd className="font-medium">{v.transmision}</dd>
-                </div>
-                <div>
-                  <dt className="text-neutral-500">Combustible</dt>
-                  <dd className="font-medium">{v.combustible}</dd>
-                </div>
-              </dl>
-
-              <div className="flex flex-col sm:flex-row gap-3 pt-1">
-                <Link
-                  href={`/contact?vehiculo=${v.id}`}
-                  className="flex-1 text-center bg-yellow-400 text-black px-4 py-2 rounded-2xl font-semibold shadow hover:bg-yellow-300"
-                >
-                  Cotizar
-                </Link>
-                <Link
-                  href="/galeria"
-                  className="flex-1 text-center px-4 py-2 rounded-2xl border hover:bg-neutral-50"
-                >
-                  Ver más vehículos
-                </Link>
-              </div>
+          {p.description && (
+            <div className="mt-5 text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">
+              {p.description}
             </div>
-          </aside>
-        </div>
+          )}
 
-        <section className="mt-12 mb-20 md:mb-28">
-          <h2 className="text-lg font-semibold mb-3">Descripción</h2>
-          <p className="text-neutral-700 leading-relaxed">
-            {v.marca} {v.modelo} {v.anio}. Excelente estado. Listo para cotizar y agendar visita.
-          </p>
-        </section>
-      </div>
-
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white/90 backdrop-blur p-3 md:hidden">
-        <div className="max-w-7xl mx-auto px-3 flex items-center gap-3">
-          <div className="font-bold">${v.precio.toLocaleString("es-CL")}</div>
-          <Link
-            href={`/contact?vehiculo=${v.id}`}
-            className="ml-auto bg-yellow-400 text-black px-4 py-2 rounded-2xl font-semibold shadow hover:bg-yellow-300"
-          >
-            Cotizar
-          </Link>
+          <a href="/galeria" className="mt-6 inline-block px-5 py-3 rounded-2xl border border-slate-200 hover:bg-slate-50">
+            Volver
+          </a>
         </div>
       </div>
-      <div className="h-24 md:hidden" />
     </main>
   );
 }
