@@ -1,3 +1,5 @@
+// src/app/perfume/[id]/page.tsx
+import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import AddToCartButton from "@/components/AddToCartButton";
 
@@ -14,9 +16,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
       },
     },
   });
-  if (!p) return null;
 
-  const imgs = Array.isArray(p.images) ? (p.images as unknown as string[]) : [];
+  if (!p) return notFound();
+
+  const imgs = Array.isArray(p.images) ? (p.images as string[]) : [];
   const img = imgs[0] ?? null;
 
   const money = (n: number) =>
@@ -24,34 +27,38 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
 
   return (
     <div className="container mx-auto max-w-3xl p-4">
-      <h1 className="text-2xl font-semibold">
-        {p.brand} {p.name}
-      </h1>
+      <h1 className="text-2xl font-semibold">{p.brand} {p.name}</h1>
 
-      <div className="mt-4 space-y-3">
-        {p.variants.map((v) => (
-          <div key={v.id} className="flex items-center justify-between rounded border p-3">
-            <div>
-              <div className="font-medium">{v.ml} ml</div>
-              <div className="text-sm text-slate-600">{money(v.price)}</div>
-              <div className="text-sm text-slate-600">
-                Stock: {v.stock} {v.stock === 0 && "(sin stock)"}
+      {p.variants.length === 0 ? (
+        <p className="mt-6 text-slate-600">
+          Este perfume no tiene variantes configuradas (3/5/10 ml). Ve a Admin y guarda stock.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {p.variants.map(v => (
+            <div key={v.id} className="flex items-center justify-between rounded border p-3">
+              <div>
+                <div className="font-medium">{v.ml} ml</div>
+                <div className="text-sm text-slate-600">{money(v.price)}</div>
+                <div className="text-sm text-slate-600">
+                  Stock: {v.stock} {v.stock === 0 && "(sin stock)"}
+                </div>
               </div>
-            </div>
 
-            <AddToCartButton
-              productId={p.id}
-              variantId={v.id}
-              name={p.name}
-              brand={p.brand}
-              ml={v.ml}
-              price={v.price}
-              image={img}
-              stock={v.stock}
-            />
-          </div>
-        ))}
-      </div>
+              <AddToCartButton
+                productId={p.id}
+                variantId={v.id}
+                name={p.name}
+                brand={p.brand}
+                ml={v.ml}
+                price={v.price}
+                image={img}
+                stock={v.stock}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
