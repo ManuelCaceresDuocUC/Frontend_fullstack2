@@ -36,7 +36,12 @@ export async function GET(_req: Request, context: unknown) {
 
     // -------- Assets (QR + Code128)
     const qrPayload = `TRACKING=${tracking};ORDEN=${o.id}`;
-    const qrPng = await QRCode.toBuffer(qrPayload, { errorCorrectionLevel: "M", margin: 0, width: 600, type: "png" });
+const qrPng = await QRCode.toBuffer(qrPayload, {
+  errorCorrectionLevel: "M",
+  margin: 4,          // <-- antes 0
+  width: 680,
+  type: "png",
+});
 
     const barcodePng = await bwipjs.toBuffer({
       bcid: "code128",
@@ -83,13 +88,13 @@ export async function GET(_req: Request, context: unknown) {
     let y = H - PAD;
 
     // QR arriba-derecha
-    const qrImg = await pdf.embedPng(qrPng);
-    const qrSize = mm(36);
-    const qrX = W - PAD - qrSize;
-    const qrY = H - PAD - qrSize;
-    page.drawImage(qrImg, { x: qrX, y: qrY, width: qrSize, height: qrSize });
-    draw("Escanea seguimiento", qrX - mm(2), qrY - mm(3), 8);
-
+    
+const qrImg = await pdf.embedPng(qrPng);
+const qrSize = mm(30);               // <-- antes 36
+const qrX = W - PAD - qrSize;        // deja ~6mm al borde
+const qrY = H - PAD - qrSize;
+page.drawImage(qrImg, { x: qrX, y: qrY, width: qrSize, height: qrSize });
+draw("Escanea seguimiento", qrX - mm(2), qrY - mm(3), 8);
     // Header izquierda
     draw(carrier, PAD, y, 13, true); y -= 16;
     draw(tracking, PAD, y, 24, true); y -= 28;
@@ -107,10 +112,11 @@ export async function GET(_req: Request, context: unknown) {
     y -= bcH + mm(3);
     draw(tracking, PAD, y, 9); // texto pequeño bajo el barcode
     y -= mm(5);
+    y -= bcH + mm(6);
 
     // Caja destinatario
     const boxTop = y;
-    const boxH = mm(62);
+    const boxH = mm(64);                 // <-- un poco más alta
     page.drawRectangle({
       x: PAD - mm(2),
       y: boxTop - boxH,
@@ -135,23 +141,26 @@ export async function GET(_req: Request, context: unknown) {
     for (const ln of wrap(notes, maxTxtW, 9)) { draw(ln, PAD, yb, 9); yb -= 11; }
 
     // Cursor bajo la caja
-    y = (boxTop - boxH) - mm(6);
+    y = (boxTop - boxH) - mm(8);         // cursor bajo la caja
 
-    // Totales y orden
-    draw(`TOTAL: ${o.total.toLocaleString("es-CL")}`, PAD, mm(58), 11, true);
-    draw(`Orden: ${o.id}`, PAD, mm(50), 9);
+    // Totales y orden (relativos a la caja, no fijos)
+    const yTotals = y;
+    draw(`TOTAL: ${o.total.toLocaleString("es-CL")}`, PAD, yTotals, 11, true);
+    draw(`Orden: ${o.id}`, PAD, yTotals - 12, 9);
 
-    // Franja “FRÁGIL · PERFUMERÍA”
-    page.drawLine({ start: { x: mm(4), y: mm(36) }, end: { x: W - mm(4), y: mm(36) }, thickness: 1, color: rgb(0, 0, 0) });
-    draw("FRÁGIL · PERFUMERÍA · NO VOLCAR", PAD, mm(30), 10, true);
+    // Franja FRÁGIL
+const yFrag = yTotals - mm(10);
+page.drawLine({ start: { x: mm(4), y: yFrag }, end: { x: W - mm(4), y: yFrag }, thickness: 1, color: rgb(0,0,0) });
+draw("FRÁGIL · PERFUMERÍA · NO VOLCAR", PAD, yFrag - 6, 10, true);
 
-    // Remitente
-    page.drawLine({ start: { x: mm(4), y: mm(26) }, end: { x: W - mm(4), y: mm(26) }, thickness: 1, color: rgb(0, 0, 0) });
-    draw("REMITENTE", PAD, mm(20), 10, true);
-    for (const ln of wrap(`${remitente} · ${remitAddr}${remitTel ? ` · Tel. ${remitTel}` : ""}`, maxTxtW, 9)) {
-      draw(ln, PAD, y = y || mm(20), 9);
-      y -= 11;
-    }
+    // Remitente (sin reutilizar `y` dentro del wrap)
+const yRemTitle = yFrag - mm(14);
+draw("REMITENTE", PAD, yRemTitle, 10, true);
+let yRem = yRemTitle - 12;
+for (const ln of wrap(`${remitente} · ${remitAddr}${remitTel ? ` · Tel. ${remitTel}` : ""}`, W - PAD*2, 9)) {
+  draw(ln, PAD, yRem, 9);
+  yRem -= 11;
+}
 // Respuesta
 const pdfBytes = await pdf.save(); // Uint8Array
 
