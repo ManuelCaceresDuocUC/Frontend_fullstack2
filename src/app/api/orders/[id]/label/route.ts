@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
-import QRCode from "qrcode";
+import * as QRCode from "qrcode";
 import bwipjs from "bwip-js";
 
 export const runtime = "nodejs";
@@ -36,18 +36,18 @@ export async function GET(_req: Request, context: unknown) {
 
     // -------- Assets (QR + Code128)
     const qrPayload = `TRACKING=${tracking};ORDEN=${o.id}`;
-const qrPng = await QRCode.toBuffer(qrPayload, {
-  errorCorrectionLevel: "M",
-  margin: 4,          // <-- antes 0
-  width: 680,
-  type: "png",
-});
+    const qrPng = await QRCode.toBuffer(qrPayload, {
+      errorCorrectionLevel: "M",
+      margin: 4, // quiet zone
+      width: 680,
+      type: "png",
+    });
 
     const barcodePng = await bwipjs.toBuffer({
       bcid: "code128",
       text: tracking,
       scale: 3,
-      height: 14,      // mm aprox escalado por bwipjs
+      height: 14,
       includetext: false,
       backgroundcolor: "FFFFFF",
       paddingwidth: 0,
@@ -69,12 +69,8 @@ const qrPng = await QRCode.toBuffer(qrPayload, {
       let line = "";
       for (const w of words) {
         const test = line ? line + " " + w : w;
-        if (font.widthOfTextAtSize(test, size) <= maxWidth) {
-          line = test;
-        } else {
-          if (line) lines.push(line);
-          line = w;
-        }
+        if (font.widthOfTextAtSize(test, size) <= maxWidth) line = test;
+        else { if (line) lines.push(line); line = w; }
       }
       if (line) lines.push(line);
       return lines;
@@ -88,13 +84,13 @@ const qrPng = await QRCode.toBuffer(qrPayload, {
     let y = H - PAD;
 
     // QR arriba-derecha
-    
-const qrImg = await pdf.embedPng(qrPng);
-const qrSize = mm(30);               // <-- antes 36
-const qrX = W - PAD - qrSize;        // deja ~6mm al borde
-const qrY = H - PAD - qrSize;
-page.drawImage(qrImg, { x: qrX, y: qrY, width: qrSize, height: qrSize });
-draw("Escanea seguimiento", qrX - mm(2), qrY - mm(3), 8);
+    const qrImg = await pdf.embedPng(qrPng);
+    const qrSize = mm(30);
+    const qrX = W - PAD - qrSize;
+    const qrY = H - PAD - qrSize;
+    page.drawImage(qrImg, { x: qrX, y: qrY, width: qrSize, height: qrSize });
+    draw("Escanea seguimiento", qrX - mm(2), qrY - mm(3), 8);
+
     // Header izquierda
     draw(carrier, PAD, y, 13, true); y -= 16;
     draw(tracking, PAD, y, 24, true); y -= 28;
@@ -112,11 +108,10 @@ draw("Escanea seguimiento", qrX - mm(2), qrY - mm(3), 8);
     y -= bcH + mm(3);
     draw(tracking, PAD, y, 9); // texto pequeño bajo el barcode
     y -= mm(5);
-    y -= bcH + mm(6);
 
     // Caja destinatario
     const boxTop = y;
-    const boxH = mm(64);                 // <-- un poco más alta
+    const boxH = mm(64);
     page.drawRectangle({
       x: PAD - mm(2),
       y: boxTop - boxH,
@@ -128,56 +123,52 @@ draw("Escanea seguimiento", qrX - mm(2), qrY - mm(3), 8);
     let yb = boxTop - mm(6);
     draw("DESTINATARIO", PAD, yb, 11, true); yb -= 14;
 
-    // Nombre
     draw(buyerName, PAD, yb, 12); yb -= 14;
 
-    // Dirección con wrap
     const maxTxtW = W - PAD * 2;
     for (const ln of wrap(street, maxTxtW, 10)) { draw(ln, PAD, yb, 10); yb -= 12; }
     for (const ln of wrap(cityReg, maxTxtW, 10)) { draw(ln, PAD, yb, 10); yb -= 12; }
 
-    // Observaciones
     draw("OBSERVACIONES:", PAD, yb, 10, true); yb -= 12;
     for (const ln of wrap(notes, maxTxtW, 9)) { draw(ln, PAD, yb, 9); yb -= 11; }
 
     // Cursor bajo la caja
-    y = (boxTop - boxH) - mm(8);         // cursor bajo la caja
+    y = (boxTop - boxH) - mm(8);
 
-    // Totales y orden (relativos a la caja, no fijos)
+    // Totales y orden
     const yTotals = y;
     draw(`TOTAL: ${o.total.toLocaleString("es-CL")}`, PAD, yTotals, 11, true);
     draw(`Orden: ${o.id}`, PAD, yTotals - 12, 9);
 
     // Franja FRÁGIL
-const yFrag = yTotals - mm(10);
-page.drawLine({ start: { x: mm(4), y: yFrag }, end: { x: W - mm(4), y: yFrag }, thickness: 1, color: rgb(0,0,0) });
-draw("FRÁGIL · PERFUMERÍA · NO VOLCAR", PAD, yFrag - 6, 10, true);
+    const yFrag = yTotals - mm(10);
+    page.drawLine({ start: { x: mm(4), y: yFrag }, end: { x: W - mm(4), y: yFrag }, thickness: 1, color: rgb(0,0,0) });
+    draw("FRÁGIL · PERFUMERÍA · NO VOLCAR", PAD, yFrag - 6, 10, true);
 
-    // Remitente (sin reutilizar `y` dentro del wrap)
-const yRemTitle = yFrag - mm(14);
-draw("REMITENTE", PAD, yRemTitle, 10, true);
-let yRem = yRemTitle - 12;
-for (const ln of wrap(`${remitente} · ${remitAddr}${remitTel ? ` · Tel. ${remitTel}` : ""}`, W - PAD*2, 9)) {
-  draw(ln, PAD, yRem, 9);
-  yRem -= 11;
-}
-// Respuesta
-const pdfBytes = await pdf.save(); // Uint8Array
+    // Remitente
+    const yRemTitle = yFrag - mm(14);
+    draw("REMITENTE", PAD, yRemTitle, 10, true);
+    let yRem = yRemTitle - 12;
+    for (const ln of wrap(`${remitente} · ${remitAddr}${remitTel ? ` · Tel. ${remitTel}` : ""}`, W - PAD*2, 9)) {
+      draw(ln, PAD, yRem, 9);
+      yRem -= 11;
+    }
 
-// Copia a un ArrayBuffer puro (no SharedArrayBuffer)
-const ab = new ArrayBuffer(pdfBytes.length);
-new Uint8Array(ab).set(pdfBytes);
+    // Respuesta (sin problemas de tipos)
+    const pdfBytes = await pdf.save(); // Uint8Array
+    const ab = new ArrayBuffer(pdfBytes.length); // ArrayBuffer limpio
+    new Uint8Array(ab).set(pdfBytes);
 
-return new NextResponse(ab, {
-  status: 200,
-  headers: {
-    "Content-Type": "application/pdf",
-    "Content-Disposition": `inline; filename="etiqueta_${tracking}.pdf"`,
-    "Cache-Control": "no-store",
-    "X-Robots-Tag": "noindex",
-    "Content-Length": String(pdfBytes.length),
-  },
-});
+    return new NextResponse(ab, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="etiqueta_${tracking}.pdf"`,
+        "Cache-Control": "no-store",
+        "X-Robots-Tag": "noindex",
+        "Content-Length": String(pdfBytes.length),
+      },
+    });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
