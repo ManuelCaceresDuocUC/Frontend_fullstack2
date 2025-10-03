@@ -9,7 +9,7 @@ type Categoria = "NICHO" | "ARABES" | "DISEÑADOR" | "OTROS";
 const dbToApiCat = (c: string): Categoria =>
   c === "DISENADOR" ? "DISEÑADOR" : (c as Categoria);
 
-// helpers SIN any
+// helpers
 function isJsonObject(v: Prisma.JsonValue): v is Prisma.JsonObject {
   return !!v && typeof v === "object" && !Array.isArray(v);
 }
@@ -26,34 +26,28 @@ function getImagesFromJson(v: Prisma.JsonValue | null): string[] {
   return [];
 }
 
-type PerfumeWithVariants = Perfume & {
-  variants: { id: string; ml: number; price: number; stock: number; active: boolean }[];
-};
-
 export default async function Page() {
-  const data: PerfumeWithVariants[] = await prisma.perfume.findMany({
+  const data = await prisma.perfume.findMany({
     orderBy: { createdAt: "desc" },
     include: {
-      variants: { select: { id: true, ml: true, price: true, stock: true, active: true } },
+      variants: {
+        select: { id: true, ml: true, price: true, stock: true, active: true },
+        orderBy: { ml: "asc" },
+      },
     },
   });
 
-  const initialRows: Row[] = data.map((p) => {
-    const qty = p.variants.reduce((acc, v) => acc + (v.stock ?? 0), 0);
-    return {
-      id: p.id,
-      nombre: p.name,
-      marca: p.brand,
-      ml: p.ml,
-      precio: p.price,
-      imagenes: getImagesFromJson(p.images),
-      categoria: dbToApiCat(String(p.tipo)),
-      qty,
-      descripcion: p.description ?? "",
-      // Si tu <Client /> ya soporta variantes, puedes pasar también:
-      // variants: p.variants,
-    };
-  });
+  const initialRows: Row[] = data.map((p) => ({
+    id: p.id,
+    nombre: p.name,
+    marca: p.brand,
+    ml: p.ml,
+    precio: p.price,
+    imagenes: getImagesFromJson(p.images),
+    categoria: dbToApiCat(String(p.tipo)),
+    descripcion: p.description ?? "",
+    variants: p.variants,
+  }));
 
   return <Client initialRows={initialRows} />;
 }
