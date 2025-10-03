@@ -1,93 +1,64 @@
 // src/app/api/stock/[id]/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** GET /api/stock/[id] (id = perfumeId) */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+// GET: devuelve variantes del perfume (id = perfumeId)
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  const { id: perfumeId } = params;
   const variants = await prisma.perfumeVariant.findMany({
-    where: { perfumeId: id },
+    where: { perfumeId },
     select: { id: true, ml: true, price: true, stock: true, active: true },
     orderBy: { ml: "asc" },
   });
-  return NextResponse.json({ perfumeId: id, variants });
+  return NextResponse.json({ ok: true, variants });
 }
 
-/** Normaliza acciones de stock (SET o INCR) */
-async function applyStock(perfumeId: string, body: unknown) {
-  const b = (body ?? {}) as {
-    // nuevos
-    variantId?: string;
-    ml?: number;
-    stock?: number;
-    delta?: number;
-    // legacy PUT { qty }
-    qty?: number;
-  };
+/**
+ * PATCH: admite dos formatos:
+ * 1) { ml, stock }                -> actualiza una sola variante del perfume
+ * 2) { ml3?, ml5?, ml10? }        -> actualiza varias a la vez si vienen presentes
+ *
+ * Si la variante no existe, la crea con price=0 y active=true.
+ */
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const { id: perfumeId } = params;
+  const body = (await req.json().catch(() => ({}))) as
+    | { ml?: number; stock?: number }
+    | { ml3?: number; ml5?: number; ml10?: number };
 
-  // compatibilidad PUT legado: qty === stock absoluto
-  if (typeof b.qty === "number" && b.stock === undefined) b.stock = b.qty;
+  // helper para setear una variante por ml
+  const upsertByMl = (ml: number, stock: number) =>
+    prisma.perfumeVariant.upsert({
+      where: { perfumeId_ml: { perfumeId, ml } },
+      update: { stock },
+      create: { perfumeId, ml, price: 0, stock, active: true },
+      select: { id: true, ml: true, stock: true, price: true, active: true },
+    });
 
-  // dónde aplicar: por id o por (perfumeId, ml)
-  let where: Prisma.PerfumeVariantWhereUniqueInput | null = null;
-  if (b.variantId) where = { id: b.variantId };
-  else if (typeof b.ml === "number") where = { perfumeId_ml: { perfumeId, ml: Math.trunc(b.ml) } };
-  if (!where) return NextResponse.json({ error: "falta variantId o ml" }, { status: 400 });
-
-  try {
-    // SET absoluto
-    if (typeof b.stock === "number" && Number.isFinite(b.stock)) {
-      const v = await prisma.perfumeVariant.update({
-        where,
-        data: { stock: Math.max(0, Math.trunc(b.stock)) },
-        select: { id: true, ml: true, stock: true },
-      });
-      return NextResponse.json({ ok: true, variant: v });
-    }
-
-    // INCR/DECR
-    if (typeof b.delta === "number" && Number.isFinite(b.delta)) {
-      const v = await prisma.perfumeVariant.update({
-        where,
-        data: { stock: { increment: Math.trunc(b.delta) } },
-        select: { id: true, ml: true, stock: true },
-      });
-      // clamp a 0
-      if (v.stock < 0) {
-        const fixed = await prisma.perfumeVariant.update({
-          where: { id: v.id },
-          data: { stock: 0 },
-          select: { id: true, ml: true, stock: true },
-        });
-        return NextResponse.json({ ok: true, variant: fixed });
-      }
-      return NextResponse.json({ ok: true, variant: v });
-    }
-
-    return NextResponse.json({ error: "body inválido" }, { status: 400 });
-  } catch (e: unknown) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025") {
-      return NextResponse.json({ error: "variante no encontrada" }, { status: 404 });
-    }
-    console.error("[/api/stock] error", e);
-    return NextResponse.json({ error: "error interno" }, { status: 500 });
+  // caso 1: { ml, stock }
+  if (typeof (body as any).ml === "number" && typeof (body as any).stock === "number") {
+    const { ml, stock } = body as any;
+    if (ml <= 0 || stock < 0) return NextResponse.json({ ok: false, error: "Datos inválidos" }, { status: 400 });
+    const variant = await upsertByMl(ml, stock);
+    return NextResponse.json({ ok: true, variant });
   }
-}
 
-/** PATCH recomendado */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const body = await req.json().catch(() => ({}));
-  return applyStock(id, body);
-}
+  // caso 2: { ml3?, ml5?, ml10? }
+  const updates: Array<{ ml: number; stock: number }> = [];
+  if (typeof (body as any).ml3 === "number")  updates.push({ ml: 3,  stock: (body as any).ml3 });
+  if (typeof (body as any).ml5 === "number")  updates.push({ ml: 5,  stock: (body as any).ml5 });
+  if (typeof (body as any).ml10 === "number") updates.push({ ml: 10, stock: (body as any).ml10 });
 
-/** PUT legado (acepta { qty } o { stock }) */
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  const body = await req.json().catch(() => ({}));
-  return applyStock(id, body);
+  if (updates.length > 0) {
+    if (updates.some(u => u.ml <= 0 || u.stock < 0)) {
+      return NextResponse.json({ ok: false, error: "Datos inválidos" }, { status: 400 });
+    }
+    const variants = await prisma.$transaction(updates.map(u => upsertByMl(u.ml, u.stock)));
+    return NextResponse.json({ ok: true, variants });
+  }
+
+  return NextResponse.json({ ok: false, error: "Body inválido" }, { status: 400 });
 }
