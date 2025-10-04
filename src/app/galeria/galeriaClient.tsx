@@ -76,28 +76,30 @@ export default function GaleriaClient() {
       .then(r => r.json() as Promise<ApiPerfume[]>)
       .then(rows => {
         const mapped: Item[] = rows.map(p => ({
-          id: p.id,
-          marca: p.marca ?? "N/D",
-          modelo: p.nombre ?? "N/D",
-          anio: 0,
-          ml: p.ml,
-          precio: p.precio ?? 0,
-          categoria: p.categoria ?? "OTROS",
-          genero: p.genero ?? "UNISEX",
-          imagen: resolveImg(p.imagenes?.[0] ?? p.imagen) || FALLBACK_IMG,
-        }));
+  id: p.id,
+  marca: p.marca ?? "N/D",
+  modelo: p.nombre ?? "N/D",
+  anio: 0,
+  ml: p.ml,
+  precio: Number(p.precio ?? 0),           // ⬅️ aquí
+  categoria: p.categoria ?? "OTROS",
+  genero: p.genero ?? "UNISEX",
+  imagen: resolveImg(p.imagenes?.[0] ?? p.imagen) || FALLBACK_IMG,
+}));
         setItems(mapped);
       })
       .catch(() => {});
   }, []);
 
-  const bounds = useMemo(() => {
-    const precios = items.map(v => v.precio ?? 0).filter(Number.isFinite);
-    const min = precios.length ? Math.min(...precios) : null;
-    const max = precios.length ? Math.max(...precios) : null;
-    return { precioMin: min, precioMax: max };
-  }, [items]);
+ const bounds = useMemo(() => {
+  const precios = items
+    .map(v => Number(v.precio ?? 0))          // <-- fuerza number
+    .filter(n => Number.isFinite(n));         // <-- mantiene number[]
 
+  const min = precios.length ? Math.min(...precios) : null;
+  const max = precios.length ? Math.max(...precios) : null;
+  return { precioMin: min, precioMax: max };
+}, [items]);
   const [filtros, setFiltros] = useState<Filtros>(() => ({
     ...initial,
     priceMin: initial.priceMin ?? (bounds.precioMin ?? null),
@@ -128,21 +130,25 @@ export default function GaleriaClient() {
   }, [items]);
 
   const aplicarFiltros = useCallback(
-    (base: Item[]) =>
-      base.filter(v => {
-        if (filtros.marcas.length && !filtros.marcas.includes(v.marca ?? "")) return false;
-        if (filtros.tipos.length && !filtros.tipos.includes((v.categoria as Categoria) ?? "OTROS")) return false;
-        if (filtros.generos.length && !filtros.generos.includes((v.genero as Genero) ?? "UNISEX")) return false;
-        if (filtros.priceMin != null && (v.precio ?? 0) < filtros.priceMin) return false;
-        if (filtros.priceMax != null && (v.precio ?? 0) > filtros.priceMax) return false;
-        if (filtros.q) {
-          const h = `${v.marca ?? ""} ${v.modelo ?? ""}`.toLowerCase();
-          if (!h.includes(filtros.q.toLowerCase())) return false;
-        }
-        return true;
-      }),
-    [filtros]
-  );
+  (base: Item[]) =>
+    base.filter(v => {
+      if (filtros.marcas.length && !filtros.marcas.includes(v.marca ?? "")) return false;
+      if (filtros.tipos.length && !filtros.tipos.includes((v.categoria as Categoria) ?? "OTROS")) return false;
+      if (filtros.generos.length && !filtros.generos.includes((v.genero as Genero) ?? "UNISEX")) return false;
+
+      const price = Number(v.precio ?? 0);
+      const min = filtros.priceMin ?? -Infinity;
+      const max = filtros.priceMax ?? Infinity;
+      if (price < min || price > max) return false;
+
+      if (filtros.q) {
+        const h = `${v.marca ?? ""} ${v.modelo ?? ""}`.toLowerCase();
+        if (!h.includes(filtros.q.toLowerCase())) return false;
+      }
+      return true;
+    }),
+  [filtros]
+);
 
   function countBy<T>(arr: T[], pick: (t: T) => string | undefined): Map<string, number> {
     const m = new Map<string, number>();
