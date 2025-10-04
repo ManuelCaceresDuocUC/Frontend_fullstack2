@@ -7,7 +7,9 @@ export type Vehiculo = {
   marca: string;
   modelo: string;
   anio?: number;
-  ml?: number;
+  stock3?: number;
+  stock5?: number;
+  stock10?: number;
   // aceptar ambos nombres
   precio?: number | string;
   price?: number | string;
@@ -36,7 +38,7 @@ const toNum = (x: unknown): number | null => {
 export default function VehicleCard({ v, compact = false }: { v?: Vehiculo; compact?: boolean }) {
   if (!v) return null;
 
-  const isPerfume = v.ml != null || v.anio == null || v.anio === 0;
+const isPerfume = v.anio == null || v.anio === 0;
 
   const base = toNum(v.precio ?? v.price);               // <- clave
   const d3 = toNum(v.price3);
@@ -81,7 +83,33 @@ export default function VehicleCard({ v, compact = false }: { v?: Vehiculo; comp
 
         <div className={`mt-1 flex flex-wrap gap-2 ${compact ? "text-[11px]" : "text-xs"}`}>
           {isPerfume ? (
-            v.ml != null && <span className="px-2 py-1 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">{v.ml} ml</span>
+            (() => {
+              const s3  = Number(v.stock3 ?? 0);
+              const s5  = Number(v.stock5 ?? 0);
+              const s10 = Number(v.stock10 ?? 0);
+              const sizes = [
+                ...(s3  > 0 ? [3]  : []),
+                ...(s5  > 0 ? [5]  : []),
+                ...(s10 > 0 ? [10] : []),
+              ];
+
+              // Si NO hay info de variantes (todo undefined), no mostramos el frasco total.
+              const hasVariantInfo = v.stock3 != null || v.stock5 != null || v.stock10 != null;
+
+              if (!hasVariantInfo) return null;                 // nada
+              if (sizes.length === 0)
+                return <span className="px-2 py-1 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">Sin stock</span>;
+
+              return (
+                <>
+                  {sizes.map(ml => (
+                    <span key={ml} className="px-2 py-1 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">
+                      {ml} ml
+                    </span>
+                  ))}
+                </>
+              );
+            })()
           ) : (
             <>
               {v.tipo && <span className="px-2 py-1 rounded-full bg-neutral-100 text-neutral-700 border border-neutral-200">{v.tipo.toUpperCase()}</span>}
