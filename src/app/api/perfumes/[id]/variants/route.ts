@@ -82,8 +82,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   return NextResponse.json({ ok: true, variant: v });
 }
-export async function POST(req: Request, { params }: { params: { perfumeId: string } }) {
-  const perfumeId = params.perfumeId;
+export async function POST(req: Request, { params }: { params: { id: string } }) {
+  const perfumeId = params.id;
   const input = (await req.json()) as { ml: number; price?: number; stock?: number };
 
   const base = await prisma.perfume.findUnique({
