@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Extrae el id de /api/perfumes/:id sin usar el 2º argumento
+// Extrae el id de /api/perfumes/:id sin usar el 2º argumento (compat Next 15)
 function getIdFromUrl(req: Request): string | null {
   const m = new URL(req.url).pathname.match(/\/api\/perfumes\/([^\/?#]+)/i);
   return m?.[1] ?? null;
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
     images: imgs,
     description: p.description,
     createdAt: p.createdAt,
-    variants: p.variants.map(v => ({
+    variants: p.variants.map((v) => ({
       id: v.id,
       ml: v.ml,
       price: v.price,
