@@ -6,11 +6,9 @@ import type { Prisma } from "@prisma/client";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Ctx = { params: Promise<{ id: string }> };
-
-/** GET /api/stock/[id]  -> id = perfumeId */
-export async function GET(_req: Request, { params }: Ctx) {
-  const { id } = await params;
+/** GET /api/perfumes/[id]/variants  -> id = perfumeId */
+export async function GET(_req: Request, { params }: { params: Record<string, string> }) {
+  const { id } = params;
   const variants = await prisma.perfumeVariant.findMany({
     where: { perfumeId: id },
     select: { id: true, ml: true, price: true, stock: true, active: true },
@@ -20,14 +18,14 @@ export async function GET(_req: Request, { params }: Ctx) {
 }
 
 /**
- * PATCH /api/stock/[id]  -> id = perfumeId
+ * PATCH /api/perfumes/[id]/variants  -> id = perfumeId
  * Body:
  *  - { variantId?: string; ml?: number; stock?: number }   // set absoluto
  *  - { variantId?: string; ml?: number; delta?: number }   // incremento/decremento
+ *  - reprice?: boolean                                     // recalcula price si falta
  */
-// src/app/api/stock/[id]/route.ts  (solo PATCH)
-export async function PATCH(req: Request, { params }: Ctx) {
-  const { id: perfumeId } = await params;
+export async function PATCH(req: Request, { params }: { params: Record<string, string> }) {
+  const perfumeId = params.id;
   const b = (await req.json()) as {
     variantId?: string;
     ml?: number;
@@ -47,11 +45,12 @@ export async function PATCH(req: Request, { params }: Ctx) {
   // 1) actualiza stock
   let v = await prisma.perfumeVariant.update({
     where,
-    data: typeof b.stock === "number"
-      ? { stock: Math.max(0, Math.trunc(b.stock)) }
-      : typeof b.delta === "number"
-        ? { stock: { increment: Math.trunc(b.delta) } }
-        : {},
+    data:
+      typeof b.stock === "number"
+        ? { stock: Math.max(0, Math.trunc(b.stock)) }
+        : typeof b.delta === "number"
+          ? { stock: { increment: Math.trunc(b.delta) } }
+          : {},
     select: { id: true, ml: true, price: true, stock: true, perfumeId: true },
   });
 
@@ -82,7 +81,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
 
   return NextResponse.json({ ok: true, variant: v });
 }
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+
+/** POST /api/perfumes/[id]/variants  -> crea variante y calcula price si no viene */
+export async function POST(req: Request, { params }: { params: Record<string, string> }) {
   const perfumeId = params.id;
   const input = (await req.json()) as { ml: number; price?: number; stock?: number };
 
