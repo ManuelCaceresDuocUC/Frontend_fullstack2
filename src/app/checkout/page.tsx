@@ -36,7 +36,8 @@ type SavedForm = {
 export default function CheckoutPage() {
   const router = useRouter();
   const items = useCart((s) => s.items);
-  const clear = useCart((s) => s.clear);
+  // IMPORTANTE: no limpiar aquí; se limpia en /gracias o retorno de pago
+  // const clear = useCart((s) => s.clear);
 
   // hidratación y redirección si carrito vacío
   const [hydrated, setHydrated] = useState(false);
@@ -64,7 +65,7 @@ export default function CheckoutPage() {
   const [shippingProvider, setShippingProvider] = useState<ShippingProvider>("");
   const [shippingReason, setShippingReason] = useState<string>("");
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>("WEBPAY");
   const [agree, setAgree] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -170,55 +171,56 @@ export default function CheckoutPage() {
     if (disabled) return;
     try {
       setLoading(true);
-      // dentro de submit(), antes del fetch:
-const lineItems =
-  items
-    .map(i =>
-      i.variantId
-        ? { variantId: i.variantId, qty: i.qty }
-        : i.productId
-          ? { productId: i.productId, ml: i.ml ?? null, qty: i.qty }
-          : null
-    )
-    .filter(Boolean) as Array<
-      { variantId: string; qty: number } |
-      { productId: string; ml: number | null; qty: number }
-    >;
 
-if (lineItems.length === 0) {
-  alert("Error: carrito vacío");
-  return;
-}
+      // Solo variantes válidas para el backend
+      const lineItems = items
+        .filter((i) => typeof i.variantId === "string" && i.qty > 0)
+        .map((i) => ({ variantId: i.variantId as string, qty: i.qty }));
 
-const payload = {
-  email,
-  buyerName,
-  phone,
-  address: {
-    street: shippingStreet,
-    city: shippingCity,
-    region: shippingRegion,
-    zip: shippingZip,
-    notes: shippingNotes,
-  },
-  items: lineItems,
-  paymentMethod,
-};
+      if (lineItems.length === 0) {
+        alert("Error: carrito vacío");
+        return;
+      }
 
-      
-      const res = await fetch("/api/checkout", {
+      const payload = {
+        email,
+        buyerName,
+        phone,
+        address: {
+          street: shippingStreet,
+          city: shippingCity,
+          region: shippingRegion,
+          zip: shippingZip,
+          notes: shippingNotes,
+        },
+        items: lineItems,
+        paymentMethod, // "WEBPAY"
+      };
+
+      // 1) Crea orden
+      const r1 = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const data: { id: string; redirectUrl?: string } = await res.json();
+      const out1 = await r1.json().catch(() => ({}));
+      if (!r1.ok) {
+        alert(out1.error ?? "Error en checkout");
+        return;
+      }
 
-      clear();
-      if (data.redirectUrl) {
-        window.location.href = data.redirectUrl;
+      // 2) Inicializa pago y redirige
+      const r2 = await fetch("/api/checkout/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: out1.id, paymentMethod }),
+      });
+      const out2 = await r2.json().catch(() => ({}));
+
+      if (r2.ok && out2.redirectUrl) {
+        window.location.href = out2.redirectUrl as string;
       } else {
-        router.replace(`/gracias/${data.id}`);
+        router.replace(`/gracias/${out1.id}`);
       }
     } catch (err) {
       alert((err as Error).message);
@@ -241,9 +243,7 @@ const payload = {
             <section className="rounded-2xl border border-slate-200 p-4 md:p-6">
               <h2 className="font-semibold text-lg mb-4">Pago</h2>
               <div className="space-y-2">
-                {([
-                  { id: "WEBPAY", label: "Webpay | Débito y Crédito" },
-                ] as const).map((opt) => (
+                {([{ id: "WEBPAY", label: "Webpay | Débito y Crédito" }] as const).map((opt) => (
                   <label
                     key={opt.id}
                     className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer ${
@@ -404,7 +404,7 @@ const payload = {
 
             <div className="space-y-4 max-h-[50vh] overflow-auto pr-1">
               {items.map((it) => (
-<div key={`${it.variantId ?? it.productId}-${it.ml ?? "x"}`} className="flex items-center gap-3">
+                <div key={`${it.variantId ?? it.productId}-${it.ml ?? "x"}`} className="flex items-center gap-3">
                   {it.image ? (
                     <div className="relative h-16 w-16 rounded overflow-hidden bg-slate-100">
                       <Image src={it.image} alt={it.name} fill className="object-cover" />
