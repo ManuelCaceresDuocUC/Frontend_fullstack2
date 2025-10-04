@@ -1,35 +1,48 @@
+// src/app/api/checkout/init/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { webpayCreate } from "@/lib/webpay"; // wrapper abajo
 
-type Body = { orderId: string; paymentMethod: "WEBPAY" };
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json().catch(() => null)) as Body | null;
-    if (!body?.orderId) return NextResponse.json({ error: "orderId requerido" }, { status: 400 });
-    if (body.paymentMethod !== "WEBPAY") return NextResponse.json({ error: "Método no soportado" }, { status: 400 });
+    const { orderId, paymentMethod } = await req.json() as { orderId: string; paymentMethod: "WEBPAY" };
+    if (paymentMethod !== "WEBPAY") return NextResponse.json({ error: "Método inválido" }, { status: 400 });
 
-    const order = await prisma.order.findUnique({ where: { id: body.orderId }, select: { id: true, total: true } });
-    if (!order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
-    if (!order.total || order.total <= 0) return NextResponse.json({ error: "Total inválido" }, { status: 400 });
+    const order = await prisma.order.findUnique({
+      where: { id: orderId }, select: { id: true, total: true }
+    });
+    if (!order || order.total <= 0) return NextResponse.json({ error: "Orden inválida" }, { status: 400 });
 
-    // Upsert por orderId único
-    const payment = await prisma.payment.upsert({
+    // crea o actualiza Payment
+    await prisma.payment.upsert({
       where: { orderId: order.id },
       update: { status: "INITIATED", amount: order.total, method: "WEBPAY" },
-      create: { orderId: order.id, method: "WEBPAY", status: "INITIATED", amount: order.total },
-      select: { id: true },
+      create: { orderId: order.id, status: "INITIATED", amount: order.total, method: "WEBPAY" },
     });
 
-    if (!process.env.WEBPAY_ENABLED) {
-      return NextResponse.json({ error: "Webpay no habilitado en servidor" }, { status: 503 });
-    }
+    const returnUrl = `${process.env.PUBLIC_BASE_URL}/pago/webpay/retorno`;
 
-    // TODO: integrar SDK Webpay y construir URL real
-    const redirectUrl = "https://webpay.mock/tx?token_ws=" + encodeURIComponent(payment.id);
-    return NextResponse.json({ redirectUrl });
+    // Llama a Webpay (real o mock)
+    const { url, token } = await webpayCreate({
+      buyOrder: order.id,
+      sessionId: order.id,
+      amount: order.total,
+      returnUrl,
+    });
+
+    // Guarda token como providerTxId para rastrear
+    await prisma.payment.update({
+      where: { orderId: order.id },
+      data: { providerTxId: token },
+    });
+
+    // Redirección por GET
+    return NextResponse.json({ redirectUrl: `${url}?token_ws=${token}` });
   } catch (e) {
-    console.error("checkout/init error:", e);
-    return NextResponse.json({ error: "Error en init" }, { status: 500 });
+    console.error("init error:", e);
+    return NextResponse.json({ error: "No se pudo iniciar Webpay" }, { status: 500 });
   }
 }

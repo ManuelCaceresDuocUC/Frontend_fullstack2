@@ -1,49 +1,56 @@
 // src/app/pago/webpay/retorno/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { commitWebpayTx } from "@/lib/payments/webpay";
+import { webpayCommit } from "@/lib/webpay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Commit = { buy_order?: string; status?: string };
-const isPaid = (s?: string) => s === "AUTHORIZED" || s === "PAID" || s === "SUCCESS";
+// Webpay retorna por POST con form-urlencoded: token_ws
+export async function POST(req: Request) {
+  try {
+    const form = await req.formData();
+    const token = String(form.get("token_ws") || "");
 
-async function finalize(token: string) {
-  const data = (await commitWebpayTx(token)) as Commit;
-  const orderId = String(data.buy_order ?? "");
-  const paid = isPaid(data.status);
+    if (!token) {
+      // algunos escenarios devuelven TBK_TOKEN o rechazo
+      return NextResponse.redirect(new URL("/gracias/error?m=falta_token", process.env.PUBLIC_BASE_URL!).toString());
+    }
 
-  await prisma.payment.update({
-    where: { orderId },
-    data: { status: paid ? "PAID" : "FAILED" },
-  }).catch(() => undefined);
+    const result = await webpayCommit(token);
+    // result: { buyOrder, amount, status: "AUTHORIZED"|"FAILED" }
 
-  if (paid) {
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { status: "PAID" },
-    }).catch(() => undefined);
+    const payment = await prisma.payment.findFirst({
+      where: { providerTxId: token },
+      select: { orderId: true },
+    });
+
+    const orderId = payment?.orderId ?? result.buyOrder;
+
+    if (result.status === "AUTHORIZED") {
+      await prisma.payment.update({
+        where: { orderId },
+        data: { status: "PAID" },
+      });
+      await prisma.order.update({
+        where: { id: orderId },
+        data: { status: "PAID" },
+      });
+      return NextResponse.redirect(new URL(`/gracias/${orderId}`, process.env.PUBLIC_BASE_URL!).toString());
+    } else {
+      await prisma.payment.update({
+        where: { orderId },
+        data: { status: "FAILED" },
+      });
+      return NextResponse.redirect(new URL(`/gracias/${orderId}?estado=rechazado`, process.env.PUBLIC_BASE_URL!).toString());
+    }
+  } catch (e) {
+    console.error("retorno webpay error:", e);
+    return NextResponse.redirect(new URL("/gracias/error?m=retorno", process.env.PUBLIC_BASE_URL!).toString());
   }
-  return { orderId, paid };
 }
 
-function redirectToResult(orderId: string, paid: boolean) {
-  const base = process.env.APP_BASE_URL!;
-  return NextResponse.redirect(`${base}/gracias/${orderId}`, { status: 303 });
-}
-
-export async function POST(req: NextRequest) {
-  const fd = await req.formData();
-  const token = String(fd.get("token_ws") ?? "");
-  if (!token) return NextResponse.json({ error: "token_ws faltante" }, { status: 400 });
-  const { orderId, paid } = await finalize(token);
-  return redirectToResult(orderId, paid);
-}
-
-export async function GET(req: NextRequest) {
-  const token = req.nextUrl.searchParams.get("token_ws");
-  if (!token) return NextResponse.redirect("/", { status: 302 });
-  const { orderId, paid } = await finalize(token);
-  return redirectToResult(orderId, paid);
+// fallback GET (por si lo configuras mal en TBK)
+export async function GET() {
+  return NextResponse.redirect(new URL("/gracias/error?m=uso_get", process.env.PUBLIC_BASE_URL!).toString());
 }
