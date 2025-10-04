@@ -51,10 +51,12 @@ type ApiPerfume = {
   marca: string;
   ml: number;
   precio: number;
-  imagen?: string;
   imagenes?: string[];
-  categoria?: Categoria;
-  genero?: Genero;
+  categoria?: Categoria | string;
+  genero?: Genero | string;
+  price3?: number | null;
+  price5?: number | null;
+  price10?: number | null;
 };
 
 /* ====== Item local: Vehiculo + categoría + género ====== */
@@ -70,36 +72,47 @@ export default function GaleriaClient() {
   const initial = useMemo(() => parseFromSearch(sp), [sp]);
 
   const [items, setItems] = useState<Item[]>([]);
+const roundCLP = (n: number) => Math.ceil(n / 10) * 10;
 
-  useEffect(() => {
-  (async () => {
-    const r = await fetch("/api/perfumes", { method: "GET", cache: "no-store" });
-    const rows = await r.json() as Array<{
-      id: string; nombre: string; marca: string; ml: number; precio: number;
-      imagenes?: string[]; genero?: string; categoria?: string;
-      price3?: number|null; price5?: number|null; price10?: number|null;
-    }>;
+ useEffect(() => {
+  fetch("/api/perfumes")
+    .then(r => r.json())
+    .then((rows: ApiPerfume[]) => {
+      const mapped: Item[] = rows.map((p) => {
+        const cat: Categoria =
+          p.categoria && ["NICHO","ARABES","DISEÑADOR","OTROS"].includes(String(p.categoria))
+            ? (p.categoria as Categoria)
+            : "OTROS";
+        const gen: Genero =
+          p.genero && ["HOMBRE","MUJER","UNISEX"].includes(String(p.genero))
+            ? (p.genero as Genero)
+            : "UNISEX";
 
-    const mapped: Item[] = rows.map(p => ({
-      id: p.id,
-      marca: p.marca ?? "N/D",
-      modelo: p.nombre ?? "N/D",
-      anio: 0,
-      ml: p.ml,
-      precio: p.precio ?? 0,
-      // estas 3 líneas hacen que la tarjeta muestre “desde …”
-      price3: p.price3 ?? undefined,
-      price5: p.price5 ?? undefined,
-      price10: p.price10 ?? undefined,
+        const perMl = p.precio > 0 && p.ml > 0 ? p.precio / p.ml : 0;
+        const sizes = [3, 5, 10].filter(s => s <= (p.ml ?? 0));
+        const price3  = sizes.includes(3)  ? roundCLP(perMl * 3)  : undefined;
+        const price5  = sizes.includes(5)  ? roundCLP(perMl * 5)  : undefined;
+        const price10 = sizes.includes(10) ? roundCLP(perMl * 10) : undefined;
 
-      // DESPUÉS
-categoria: (p.categoria as typeof CATS[number] | undefined) ?? "OTROS",
-genero: (p.genero as "HOMBRE" | "MUJER" | "UNISEX" | undefined) ?? "UNISEX",
-      imagen: (p.imagenes?.[0]) ? resolveImg(p.imagenes[0]) : FALLBACK_IMG,
-    }));
+        return {
+          id: p.id,
+          marca: p.marca ?? "N/D",
+          modelo: p.nombre ?? "N/D",
+          anio: 0,
+          ml: Number(p.ml ?? 0),
+          precio: Number(p.precio ?? 0),
+          price3:  p.price3 ?? price3,
+          price5:  p.price5 ?? price5,
+          price10: p.price10 ?? price10,
+          categoria: cat,
+          genero: gen,
+          imagen: resolveImg(p.imagenes?.[0]) || FALLBACK_IMG,
+        };
+      });
 
-    setItems(mapped);
-  })().catch(() => {});
+      setItems(mapped);
+    })
+    .catch(() => {});
 }, []);
 
  const bounds = useMemo(() => {
