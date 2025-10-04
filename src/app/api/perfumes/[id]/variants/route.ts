@@ -3,23 +3,28 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
+function getPerfumeId(req: Request) {
+  const u = new URL(req.url);
+  const parts = u.pathname.split("/"); // ["", "api", "perfumes", "[id]", "variants"]
+  const i = parts.indexOf("perfumes");
+  return i >= 0 ? parts[i + 1] : "";
+}
+
 // GET /api/perfumes/[id]/variants
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function GET(req: Request) {
+  const perfumeId = getPerfumeId(req);
   const variants = await prisma.perfumeVariant.findMany({
-    where: { perfumeId: id },
+    where: { perfumeId },
     select: { id: true, ml: true, price: true, stock: true, active: true },
     orderBy: { ml: "asc" },
   });
-  return NextResponse.json({ perfumeId: id, variants });
+  return NextResponse.json({ perfumeId, variants });
 }
 
 // PATCH /api/perfumes/[id]/variants
-export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const perfumeId = params.id;
-  const b = await req.json() as {
-    variantId?: string; ml?: number; stock?: number; delta?: number; reprice?: boolean;
-  };
+export async function PATCH(req: Request) {
+  const perfumeId = getPerfumeId(req);
+  const b = await req.json() as { variantId?: string; ml?: number; stock?: number; delta?: number; reprice?: boolean };
 
   if (!b.variantId && typeof b.ml !== "number")
     return NextResponse.json({ error: "faltan variantId o ml" }, { status: 400 });
@@ -64,8 +69,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 // POST /api/perfumes/[id]/variants
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const perfumeId = params.id;
+export async function POST(req: Request) {
+  const perfumeId = getPerfumeId(req);
   const input = await req.json() as { ml: number; price?: number; stock?: number };
 
   const base = await prisma.perfume.findUnique({
