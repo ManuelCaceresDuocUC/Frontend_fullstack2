@@ -1,13 +1,24 @@
 // src/app/pago/webpay/mock/route.ts
 import { NextResponse } from "next/server";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export async function GET(req: Request) {
+  const u = new URL(req.url);
+  const returnUrl = u.searchParams.get("return") || "/";
+  const token = u.searchParams.get("token_ws") || `mock_${Date.now()}`;
 
-export async function POST(req: Request, ctx: { url: string }) {
-  const u = new URL(ctx.url);
-  const ret = u.searchParams.get("return") || "/";
-  const fd = await req.formData();
-  const token = String(fd.get("token_ws") ?? "");
-  return NextResponse.redirect(`${ret}?token_ws=${encodeURIComponent(token)}`);
+  const html = `<!doctype html><meta charset="utf-8">
+  <title>Mock Webpay</title>
+  <h1>Mock Webpay</h1>
+  <p>Simulador: autoriza el pago.</p>
+  <form method="POST" action="/pago/webpay/mock?return=${encodeURIComponent(returnUrl)}&token_ws=${encodeURIComponent(token)}">
+    <button type="submit">Autorizar pago</button>
+  </form>`;
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+}
+
+export async function POST(req: Request) {
+  const u = new URL(req.url);
+  const returnUrl = u.searchParams.get("return") || "/";
+  const token = u.searchParams.get("token_ws") || `mock_${Date.now()}`;
+  return NextResponse.redirect(`${returnUrl}?token_ws=${encodeURIComponent(token)}`, 303);
 }
