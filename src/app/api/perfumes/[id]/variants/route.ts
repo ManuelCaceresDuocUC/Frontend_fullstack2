@@ -3,39 +3,31 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-type Ctx = { params: Record<string, string | string[]> };
-const getId = (ctx: Ctx) => Array.isArray(ctx.params.id) ? ctx.params.id[0] : ctx.params.id;
-
 // GET /api/perfumes/[id]/variants
-export async function GET(_req: Request, ctx: Ctx) {
-  const perfumeId = getId(ctx);
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  const { id } = params;
   const variants = await prisma.perfumeVariant.findMany({
-    where: { perfumeId },
+    where: { perfumeId: id },
     select: { id: true, ml: true, price: true, stock: true, active: true },
     orderBy: { ml: "asc" },
   });
-  return NextResponse.json({ perfumeId, variants });
+  return NextResponse.json({ perfumeId: id, variants });
 }
 
 // PATCH /api/perfumes/[id]/variants
-export async function PATCH(req: Request, ctx: Ctx) {
-  const perfumeId = getId(ctx);
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const perfumeId = params.id;
   const b = await req.json() as {
     variantId?: string; ml?: number; stock?: number; delta?: number; reprice?: boolean;
   };
 
-  if (!b.variantId && typeof b.ml !== "number") {
+  if (!b.variantId && typeof b.ml !== "number")
     return NextResponse.json({ error: "faltan variantId o ml" }, { status: 400 });
-  }
 
   const where: Prisma.PerfumeVariantWhereUniqueInput = b.variantId
     ? { id: b.variantId }
     : { perfumeId_ml: { perfumeId, ml: Number(b.ml) } };
 
-  // 1) stock
   let v = await prisma.perfumeVariant.update({
     where,
     data:
@@ -54,14 +46,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
     });
   }
 
-  // 2) reprice
   if (b.reprice || !v.price || v.price <= 0) {
     const base = await prisma.perfume.findUnique({
       where: { id: v.perfumeId }, select: { ml: true, price: true },
     });
-    if (!base || !base.price || base.price <= 0) {
+    if (!base || !base.price || base.price <= 0)
       return NextResponse.json({ error: "Base sin precio" }, { status: 400 });
-    }
+
     const newPrice = Math.round((base.price * v.ml) / base.ml);
     v = await prisma.perfumeVariant.update({
       where: { id: v.id }, data: { price: newPrice, active: true },
@@ -73,8 +64,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
 }
 
 // POST /api/perfumes/[id]/variants
-export async function POST(req: Request, ctx: Ctx) {
-  const perfumeId = getId(ctx);
+export async function POST(req: Request, { params }: { params: { id: string } }) {
+  const perfumeId = params.id;
   const input = await req.json() as { ml: number; price?: number; stock?: number };
 
   const base = await prisma.perfume.findUnique({
