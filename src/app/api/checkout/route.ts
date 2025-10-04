@@ -2,161 +2,151 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { PaymentMethod, PaymentStatus, Prisma } from "@prisma/client";
+import { PaymentMethod, PaymentStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const CK = "cart";
-
-type CartCookieItem = {
-  productId: string;
-  variantId: string;
-  name: string;
-  brand: string;
-  ml: number;
-  unitPrice: number;
-  qty: number;
-  image: string | null;
+type Line = { variantId: string; qty: number };
+type Body = {
+  email?: string;
+  buyerName?: string;
+  phone?: string;
+  address?: { street?: string; city?: string; region?: string; zip?: string; notes?: string };
+  items?: Line[];
+  paymentMethod?: "WEBPAY" | "SERVIPAG" | "MANUAL" | "MERCADOPAGO" | "VENTIPAY";
 };
 
-function isCartCookieItem(x: unknown): x is CartCookieItem {
-  if (typeof x !== "object" || x === null) return false;
-  const r = x as Record<string, unknown>;
-  return (
-    typeof r.productId === "string" &&
-    typeof r.variantId === "string" &&
-    typeof r.name === "string" &&
-    typeof r.brand === "string" &&
-    typeof r.ml === "number" &&
-    typeof r.unitPrice === "number" &&
-    typeof r.qty === "number" &&
-    (typeof r.image === "string" || r.image === null)
-  );
-}
-
-function parseCart(raw?: string): CartCookieItem[] {
-  if (!raw) return [];
+async function parseCookieCart(): Promise<Line[]> {
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isCartCookieItem);
+    const jar = await cookies(); // <- await
+    const raw = jar.get("cart")?.value ?? "";
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((x: unknown) => {
+        if (typeof x !== "object" || !x) return null;
+        const vId = (x as Record<string, unknown>).variantId;
+        const qty = Number((x as Record<string, unknown>).qty);
+        if (typeof vId === "string" && qty > 0) return { variantId: vId, qty };
+        return null;
+      })
+      .filter((x): x is Line => !!x);
   } catch {
     return [];
   }
 }
 
-type LineCreate = {
-  perfumeId: string;
-  variantId: string;
-  name: string;
-  brand: string;
-  ml: number;
-  unitPrice: number;
-  qty: number;
-};
+function mapPayment(m?: Body["paymentMethod"]): PaymentMethod {
+  if (m === "WEBPAY") return PaymentMethod.WEBPAY;
+  if (m === "SERVIPAG") return PaymentMethod.SERVIPAG;
+  return PaymentMethod.MANUAL; // fallback
+}
 
 export async function POST(req: Request) {
-  // Lee carrito
-  const jar = await cookies();
-  const cart = parseCart(jar.get(CK)?.value);
-  if (cart.length === 0) {
+  const body = (await req.json().catch(() => ({}))) as Body;
+
+  const fromBody = Array.isArray(body.items) ? body.items : [];
+  const fromCookie = await parseCookieCart(); // <- await
+  const raw: Line[] = (fromBody.length ? fromBody : fromCookie).filter(
+    (l): l is Line => !!l && typeof l.variantId === "string" && Number(l.qty) > 0
+  );
+
+  if (raw.length === 0) {
     return NextResponse.json({ error: "carrito vacío" }, { status: 400 });
   }
 
-  // Carga variantes
-  const ids = cart.map((c) => c.variantId);
+  // Cargar variantes
+  const ids = raw.map((l) => l.variantId);
   const variants = await prisma.perfumeVariant.findMany({
     where: { id: { in: ids } },
     select: {
-      id: true,
-      perfumeId: true,
-      ml: true,
-      price: true,
-      stock: true,
-      active: true,
+      id: true, ml: true, price: true, stock: true, active: true, perfumeId: true,
       perfume: { select: { name: true, brand: true } },
     },
   });
   const byId = new Map(variants.map((v) => [v.id, v]));
 
-  // Valida y arma líneas con precios de la BD
-  const lines: LineCreate[] = cart.map((c): LineCreate => {
-    const v = byId.get(c.variantId);
-    if (!v) throw new Error("variante no encontrada");
-    if (!v.active) throw new Error("variante inactiva");
-    if (v.stock < c.qty) throw new Error("sin stock");
-    return {
-      perfumeId: v.perfumeId,
-      variantId: v.id,
-      name: v.perfume.name,
-      brand: v.perfume.brand,
-      ml: v.ml,
-      unitPrice: v.price,
-      qty: c.qty,
-    };
-  });
+  // Normalizar contra stock
+  const checked = raw
+    .map((l) => {
+      const v = byId.get(l.variantId);
+      if (!v || !v.active) return null;
+      const qty = Math.min(l.qty, v.stock);
+      if (qty <= 0) return null;
+      return {
+        variantId: v.id,
+        perfumeId: v.perfumeId,
+        name: v.perfume.name,
+        brand: v.perfume.brand,
+        ml: v.ml,
+        unitPrice: v.price,
+        qty,
+      };
+    })
+    .filter(Boolean) as Array<{
+      variantId: string; perfumeId: string; name: string; brand: string; ml: number; unitPrice: number; qty: number;
+    }>;
 
-  const subtotal = lines.reduce((a, l) => a + l.unitPrice * l.qty, 0);
-  const shippingFee = 0; // ajusta tu lógica de envío
+  if (checked.length === 0) {
+    return NextResponse.json({ error: "sin stock" }, { status: 400 });
+  }
+
+  const subtotal = checked.reduce((s, x) => s + x.unitPrice * x.qty, 0);
+  const shippingFee = 0;
   const total = subtotal + shippingFee;
 
-  // Datos del comprador (opcionales en body)
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    body = {};
-  }
-  const b = (body as Record<string, unknown>) || {};
-  const email = String(b.email ?? "");
-  const buyerName = String(b.buyerName ?? "");
-  const phone = String(b.phone ?? "");
-  const shippingStreet = String(b.shippingStreet ?? "");
-  const shippingCity = String(b.shippingCity ?? "");
-  const shippingRegion = String(b.shippingRegion ?? "");
-  const shippingZip = String(b.shippingZip ?? "");
-  const shippingNotes = String(b.shippingNotes ?? "");
-
-  // Transacción: crea orden y descuenta stock
-  const created = await prisma.$transaction(async (tx) => {
-    const order = await tx.order.create({
+  const order = await prisma.$transaction(async (tx) => {
+    const created = await tx.order.create({
       data: {
-        email,
-        buyerName,
-        phone,
-        shippingStreet,
-        shippingCity,
-        shippingRegion,
-        shippingZip,
-        shippingNotes,
+        email: body.email ?? "",
+        buyerName: body.buyerName ?? "",
+        phone: body.phone ?? "",
+        shippingStreet: body.address?.street ?? "",
+        shippingCity: body.address?.city ?? "",
+        shippingRegion: body.address?.region ?? "",
+        shippingZip: body.address?.zip ?? "",
+        shippingNotes: body.address?.notes ?? "",
         subtotal,
         shippingFee,
         total,
-        items: { create: lines },
-        payment: {
-          create: {
-            method: PaymentMethod.WEBPAY,
-            status: PaymentStatus.INITIATED,
-            amount: total,
-          },
-        },
       },
-      select: { id: true },
     });
 
+    await tx.orderItem.createMany({
+      data: checked.map((l) => ({
+        orderId: created.id,
+        perfumeId: l.perfumeId,
+        variantId: l.variantId,
+        name: l.name,
+        brand: l.brand,
+        ml: l.ml,
+        unitPrice: l.unitPrice,
+        qty: l.qty,
+      })),
+    });
+
+    // Descontar stock
     await Promise.all(
-      lines.map((line) =>
+      checked.map((l) =>
         tx.perfumeVariant.update({
-          where: { id: line.variantId },
-          data: { stock: { decrement: line.qty } },
+          where: { id: l.variantId },
+          data: { stock: { decrement: l.qty } },
         })
       )
     );
 
-    return order;
+    await tx.payment.create({
+      data: {
+        orderId: created.id,
+        method: mapPayment(body.paymentMethod),
+        status: PaymentStatus.INITIATED,
+        amount: total,
+      },
+    });
+
+    return created;
   });
 
-  // Respuesta mínima para continuar con Webpay u otro flujo
-  return NextResponse.json({ id: created.id, total }, { status: 200 });
+  return NextResponse.json({ ok: true, id: order.id, total }, { status: 200 });
 }
