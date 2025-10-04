@@ -7,6 +7,8 @@ import CartDrawer from "@/components/CartDrawer";
 import Footer from "@/components/Footer"; // <-- respeta mayúsculas
 import Navbar from "@/components/Navbar";
 import Providers from "@/components/Providers";
+import ShippingMarquee from "@/components/ShippingMarquee";
+
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -23,6 +25,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <Navbar />
           <main className="flex-1">{children}</main>
+                  <ShippingMarquee className="sticky top-[56px]" /> {/* ajusta el top a la altura de tu navbar */}
+
           <CartFab />
           <CartDrawer />
           <Footer />
