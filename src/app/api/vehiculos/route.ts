@@ -1,65 +1,48 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";import fs from "fs/promises";
-import path from "path";
-import crypto from "crypto";
-import type { Vehiculo } from "@/types/vehiculo";
-import { SEED_VEHICULOS } from "@/data/vehiculos.seed";
+import { prisma } from "@/lib/prisma";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+const S3_BASE = (process.env.S3_PUBLIC_BASE_URL ?? process.env.NEXT_PUBLIC_S3_BASE ?? "").replace(/\/+$/, "");
+const resolveImg = (s?: string | null) =>
+  !s ? "" : /^https?:\/\//i.test(String(s)) ? String(s) : (S3_BASE ? `${S3_BASE}/${String(s).replace(/^\/+/, "")}` : String(s));
+const roundCLP = (n: number) => Math.ceil(n / 10) * 10;
 
+type VariantOut = { id: string; ml: number; price: number; stock: number; active: boolean };
 
-export const GET = () => NextResponse.json({ error: "gone" }, { status: 410 });
-export const POST = () => NextResponse.json({ error: "gone" }, { status: 410 });
-export const DELETE = () => NextResponse.json({ error: "gone" }, { status: 410 });
+export async function GET() {
+  const perfumes = await prisma.perfume.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { variants: true },
+  });
 
+  const items = perfumes.map((p) => {
+    const imgs = Array.isArray(p.images) ? (p.images as unknown as string[]) : [];
+    const firstImg = resolveImg(imgs[0] ?? null);
 
+    const v3 = p.variants.find((v) => v.ml === 3 && v.active);
+    const v5 = p.variants.find((v) => v.ml === 5 && v.active);
+    const v10 = p.variants.find((v) => v.ml === 10 && v.active);
 
-const DATA_PATH = path.join(process.cwd(), "data", "vehiculos.json");
-const GALLERY_DIR = path.join(process.cwd(), "public", "gallery");
+    const perMl = p.price / Math.max(1, p.ml);
+    const price3 = v3 ? v3.price : roundCLP(perMl * 3);
+    const price5 = v5 ? v5.price : roundCLP(perMl * 5);
+    const price10 = v10 ? v10.price : roundCLP(perMl * 10);
 
-function mergeSeed(persisted: Vehiculo[]): Vehiculo[] {
-  const map = new Map<string, Vehiculo>();
-  SEED_VEHICULOS.forEach((v: Vehiculo) => map.set(String(v.id), v));   // tipa v
-  persisted.forEach((v: Vehiculo) => map.set(String(v.id), v));        // tipa v
-  return [...map.values()];
+    return {
+      // shape que usa VehicleCard
+      id: p.id,
+      marca: p.brand,
+      modelo: p.name,
+      ml: p.ml,
+      // acepta ambos nombres en el front; aquí mandamos ambos para evitar 0
+      precio: p.price,
+      price: p.price,
+      price3,
+      price5,
+      price10,
+      tipo: (p.tipo as unknown as string) ?? "OTROS",
+      imagen: firstImg || "https://via.placeholder.com/800x1000?text=Imagen",
+    };
+  });
+
+  return NextResponse.json({ items });
 }
-
-async function readAll(): Promise<Vehiculo[]> {
-  try {
-    const raw = JSON.parse(await fs.readFile(DATA_PATH, "utf8")) as Partial<Vehiculo>[];
-    let changed = false;
-
-    const list: Vehiculo[] = raw.map((r) => {
-      if (!r.id) { r.id = crypto.randomUUID(); changed = true; }
-      return {
-        id: r.id!,
-        userEmail: typeof r.userEmail === "string" ? r.userEmail : undefined,
-        marca: String(r.marca ?? "N/D"),
-        modelo: String(r.modelo ?? "N/D"),
-        anio: Number(r.anio ?? 0),
-        precio: Number(r.precio ?? 0),
-        tipo: String(r.tipo ?? "suv"),
-        combustible: String(r.combustible ?? "gasolina"),
-        transmision: String(r.transmision ?? "manual"),
-        imagen: typeof r.imagen === "string" ? r.imagen : "/gallery/placeholder.jpg",
-        imagenes: Array.isArray(r.imagenes) ? r.imagenes : (r.imagen ? [r.imagen] : []),
-        creadoEn: typeof r.creadoEn === "string" ? r.creadoEn : undefined,
-      };
-    });
-
-    if (changed) await writeAll(list);
-    return list;
-  } catch {
-    return [];
-  }
-}
-
-async function writeAll(list: Vehiculo[]) {
-  await fs.mkdir(path.dirname(DATA_PATH), { recursive: true });
-  await fs.writeFile(DATA_PATH, JSON.stringify(list, null, 2));
-}
-
-
-
