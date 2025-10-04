@@ -1,6 +1,5 @@
 // src/app/api/payments/webpay/init/route.ts
 import { NextResponse } from "next/server";
-import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { webpayTx } from "@/lib/webpay";
 
@@ -9,38 +8,32 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const { orderId } = (await req.json()) as { orderId?: string };
-    if (!orderId) return NextResponse.json({ error: "orderId requerido" }, { status: 400 });
-
+    const { orderId } = (await req.json()) as { orderId: string };
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: { items: true },
+      select: { id: true, total: true },
     });
-    if (!order) return NextResponse.json({ error: "Orden no encontrada" }, { status: 404 });
+    if (!order || order.total <= 0) {
+      return NextResponse.json({ error: "Orden inválida" }, { status: 400 });
+    }
 
-    // Usa siempre unitPrice (tu tipo no tiene 'price')
-    const amount = Math.max(
-      1,
-      order.items.reduce((s, it) => s + it.unitPrice * it.qty, 0)
-    );
-
-    const buyOrder = String(order.id).slice(0, 26);
-    const sessionId = String(order.id).slice(0, 61);
-
-    const h = await headers();
-    const host = h.get("host")!;
-    const proto = h.get("x-forwarded-proto") ?? (process.env.NODE_ENV === "production" ? "https" : "http");
-    const returnUrl = `${proto}://${host}/pago/webpay/retorno`;
-
-    const resp = await webpayTx.create(buyOrder, sessionId, amount, returnUrl);
-
-    return NextResponse.json({
-      url: `${resp.url}?token_ws=${resp.token}`,
-      token: resp.token,
+    const returnUrl = `${process.env.PUBLIC_BASE_URL}/pago/webpay/retorno`;
+    const { url, token } = await webpayTx.create({
+      buyOrder: order.id,
+      sessionId: order.id,
+      amount: order.total,
+      returnUrl,
     });
-  } catch (e: unknown) {
-    const err = e as { response?: { data?: unknown; statusText?: string }; message?: string };
-    const detail = err.response?.data ?? err.response?.statusText ?? err.message ?? "Unknown error";
-    return NextResponse.json({ error: String(detail) }, { status: 500 });
+
+    await prisma.payment.upsert({
+      where: { orderId: order.id },
+      update: { method: "WEBPAY", status: "INITIATED", amount: order.total, providerTxId: token },
+      create: { orderId: order.id, method: "WEBPAY", status: "INITIATED", amount: order.total, providerTxId: token },
+    });
+
+    return NextResponse.json({ redirectUrl: `${url}?token_ws=${token}` });
+  } catch (e) {
+    console.error("webpay init error:", e);
+    return NextResponse.json({ error: "No se pudo iniciar Webpay" }, { status: 500 });
   }
 }
