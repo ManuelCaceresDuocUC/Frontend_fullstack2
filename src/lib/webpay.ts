@@ -1,26 +1,38 @@
 // src/lib/webpay.ts
-const MODE = (process.env.TBK_ENV || "mock").toLowerCase();
+import {
+  WebpayPlus,
+  Options,
+  Environment,
+  IntegrationApiKeys,
+  IntegrationCommerceCodes,
+} from "transbank-sdk";
 
-export type InitInput = { buyOrder: string; sessionId: string; amount: number; returnUrl: string };
-export type InitResp  = { url: string; token: string };
-export type CommitResp = { buyOrder: string; amount: number; status: "AUTHORIZED" | "FAILED" };
-
-// MOCK
-async function mockCreate(i: InitInput): Promise<InitResp> {
-  const token = `mock_${Date.now()}`;
-  const url = `/pago/webpay/mock?return=${encodeURIComponent(i.returnUrl)}&token_ws=${encodeURIComponent(token)}`;
-  return { url, token };
-}
-async function mockCommit(_token: string): Promise<CommitResp> {
-  return { buyOrder: "mock", amount: 0, status: "AUTHORIZED" };
+function env(k: string) {
+  return process.env[k]?.trim();
 }
 
-// PROD (stub)
-async function prodCreate(_: InitInput): Promise<InitResp> { throw new Error("Implementa Webpay prod"); }
-async function prodCommit(_: string): Promise<CommitResp> { throw new Error("Implementa Webpay prod"); }
+const ENV_RAW = (env("TBK_ENV") || env("WEBPAY_ENV") || "integration").toLowerCase();
+const IS_PROD = ENV_RAW === "prod" || ENV_RAW === "production";
 
-export const webpayTx = {
-  create: (i: InitInput) => (MODE === "prod" ? prodCreate(i) : mockCreate(i)),
-  commit: (t: string) => (MODE === "prod" ? prodCommit(t) : mockCommit(t)),
-};
-export default webpayTx;
+const PROD_COMMERCE = env("WEBPAY_COMMERCE_CODE"); // requerido solo en prod
+const PROD_API_KEY  = env("TBK_API_KEY_SECRET") || env("WEBPAY_API_KEY");
+
+if (IS_PROD && (!PROD_COMMERCE || !PROD_API_KEY)) {
+  throw new Error("Faltan WEBPAY_COMMERCE_CODE y/o TBK_API_KEY_SECRET para producción.");
+}
+
+const options = IS_PROD
+  ? new Options(PROD_COMMERCE!, PROD_API_KEY!, Environment.Production)
+  : new Options(
+      IntegrationCommerceCodes.WEBPAY_PLUS,
+      IntegrationApiKeys.WEBPAY,
+      Environment.Integration
+    );
+
+export const webpayTx = new WebpayPlus.Transaction(options);
+
+// helpers opcionales
+export const webpayCreate = (buyOrder: string, sessionId: string, amount: number, returnUrl: string) =>
+  webpayTx.create(buyOrder, sessionId, amount, returnUrl);
+
+export const webpayCommit = (token: string) => webpayTx.commit(token);

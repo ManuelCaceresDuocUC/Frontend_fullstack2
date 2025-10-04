@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 type ItemIn =
-  | { id: string; qty: number }                 // perfume base
-  | { variantId: string; qty: number };         // variante
+  | { id: string; qty: number }          // perfume base
+  | { variantId: string; qty: number };  // variante
 
 type Body = {
   email: string;
@@ -44,20 +44,13 @@ export async function POST(req: Request) {
       if ("variantId" in it && it.variantId) {
         const v = await prisma.perfumeVariant.findUnique({
           where: { id: it.variantId },
-          select: { id: true, ml: true, price: true, perfume: { select: { id: true, name: true, brand: true } } },
+          select: {
+            id: true, ml: true, price: true,
+            perfume: { select: { id: true, name: true, brand: true } },
+          },
         });
         if (!v) return NextResponse.json({ error: "Variante no encontrada" }, { status: 400 });
-
-        // Defensa: si el price de la variante viene 0, calcula en base al perfume
-        let unitPrice = v.price;
-        if (!unitPrice || unitPrice <= 0) {
-          const base = await prisma.perfume.findUnique({
-            where: { id: v.perfume.id }, select: { ml: true, price: true }
-          });
-          if (!base || !base.price || base.price <= 0)
-            return NextResponse.json({ error: "Precio base inválido" }, { status: 400 });
-          unitPrice = Math.round((base.price * v.ml) / base.ml);
-        }
+        if (!v.price || v.price <= 0) return NextResponse.json({ error: "Precio de variante inválido" }, { status: 400 });
 
         lines.push({
           perfumeId: v.perfume.id,
@@ -65,13 +58,14 @@ export async function POST(req: Request) {
           name: v.perfume.name,
           brand: v.perfume.brand,
           ml: v.ml,
-          unitPrice,
+          unitPrice: v.price,
           qty,
         });
-        subtotal += unitPrice * qty;
+        subtotal += v.price * qty;
       } else if ("id" in it && it.id) {
         const p = await prisma.perfume.findUnique({
-          where: { id: it.id }, select: { id: true, name: true, brand: true, ml: true, price: true },
+          where: { id: it.id },
+          select: { id: true, name: true, brand: true, ml: true, price: true },
         });
         if (!p) return NextResponse.json({ error: "Producto no encontrado" }, { status: 400 });
         if (!p.price || p.price <= 0) return NextResponse.json({ error: "Precio de producto inválido" }, { status: 400 });
@@ -107,8 +101,9 @@ export async function POST(req: Request) {
         subtotal,
         shippingFee,
         total,
+        // items:
         items: {
-          create: lines.map(l => ({
+          create: lines.map((l) => ({
             perfume: { connect: { id: l.perfumeId } },
             ...(l.variantId ? { variant: { connect: { id: l.variantId } } } : {}),
             name: l.name,
@@ -119,10 +114,10 @@ export async function POST(req: Request) {
           })),
         },
       },
-      select: { id: true, total: true },
+      select: { id: true },
     });
 
-    return NextResponse.json(order);
+    return NextResponse.json({ id: order.id });
   } catch (e) {
     console.error("checkout error:", e);
     return NextResponse.json({ error: "Error en checkout" }, { status: 500 });

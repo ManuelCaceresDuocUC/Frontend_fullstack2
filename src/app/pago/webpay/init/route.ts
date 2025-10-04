@@ -1,4 +1,4 @@
-// src/app/api/checkout/init/route.ts
+// src/app/pago/webpay/init/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { webpayTx } from "@/lib/webpay";
@@ -21,19 +21,14 @@ export async function POST(req: Request) {
   if (!base) return NextResponse.json({ error: "PUBLIC_BASE_URL no definido" }, { status: 500 });
   const returnUrl = `${base}/pago/webpay/retorno`;
 
-  const { url, token } = await webpayTx.create({
-    buyOrder: order.id,
-    sessionId: order.id,
-    amount: order.total,
-    returnUrl,
-  });
+  // SDK WebpayPlus → (buyOrder, sessionId, amount, returnUrl)
+  const { url, token } = await webpayTx.create(order.id, order.id, order.total, returnUrl);
 
-  // registra/actualiza el Payment
   await prisma.payment.upsert({
     where: { orderId: order.id },
     update: { method: "WEBPAY", status: "INITIATED", amount: order.total, providerTxId: token },
     create: { orderId: order.id, method: "WEBPAY", status: "INITIATED", amount: order.total, providerTxId: token },
   });
 
-  return NextResponse.json({ url, token });
+  return NextResponse.json({ redirectUrl: `${url}?token_ws=${token}`, url, token });
 }

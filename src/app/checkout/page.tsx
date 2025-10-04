@@ -128,71 +128,74 @@ export default function CheckoutPage() {
     loading || items.length === 0 || !agree || !email || !buyerName ||
     !shippingStreet || !shippingCity || !shippingRegion || !paymentMethod || !shippingQuoted;
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (disabled) return;
-    try {
-      setLoading(true);
+ async function submit(e: React.FormEvent) {
+  e.preventDefault();
+  if (disabled) return;
 
-      // Solo variantes válidas
-      const lineItems = items
-        .filter((i) => typeof i.variantId === "string" && i.qty > 0)
-        .map((i) => ({ variantId: i.variantId as string, qty: i.qty }));
+  try {
+    setLoading(true);
 
-      if (lineItems.length === 0) { alert("Error: carrito vacío"); return; }
+    // Solo variantes válidas
+    const lineItems = items
+      .filter((i) => typeof i.variantId === "string" && i.qty > 0)
+      .map((i) => ({ variantId: i.variantId as string, qty: i.qty }));
 
-      // 1) Crea orden
-      const r1 = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email, buyerName, phone,
-          address: { street: shippingStreet, city: shippingCity, region: shippingRegion, zip: shippingZip, notes: shippingNotes },
-          shipping: { fee: shippingFee },
-          items: lineItems,
-          paymentMethod,   // "WEBPAY"
-        }),
-      });
-      const out1 = await r1.json().catch(() => ({}));
-      if (!r1.ok) { alert(out1.error ?? "Error en checkout"); return; }
+    if (lineItems.length === 0) { alert("Error: carrito vacío"); return; }
 
-      // 2) Inicializa pago y redirige
-      const r2 = await fetch("/api/checkout/init", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: out1.id }) });
-const out2 = await r2.json().catch(() => ({}));
+    // 1) Crea orden
+    const r1 = await fetch("/api/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email, buyerName, phone,
+        address: { street: shippingStreet, city: shippingCity, region: shippingRegion, zip: shippingZip, notes: shippingNotes },
+        shipping: { fee: shippingFee },
+        items: lineItems,
+        paymentMethod,   // "WEBPAY"
+      }),
+    });
+    const out1 = await r1.json().catch(() => ({}));
+    if (!r1.ok) { alert(out1.error ?? "Error en checkout"); return; }
 
-if (r2.ok && out2.url && out2.token) {
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = out2.url;               // /pago/webpay/mock?return=...
-  const inp = document.createElement("input");
-  inp.type = "hidden";
-  inp.name = "token_ws";
-  inp.value = out2.token;
-  form.appendChild(inp);
-  document.body.appendChild(form);
-  form.submit();
-  return;
-} else {
-  router.replace(`/gracias/${out1.id}`);
+    // 2) Inicializa pago y redirige
+    const r2 = await fetch("/api/checkout/init", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId: out1.id }),
+    });
+    const out2 = await r2.json();
+    if (!r2.ok) { alert(out2.error ?? "No se pudo iniciar el pago"); return; }
+
+    // Preferimos GET con token_ws (lo que envía tu API)
+    if (out2.redirectUrl) {
+      window.location.href = out2.redirectUrl;
+      return;
+    }
+
+    // Fallback si algún día devuelves { url, token } (POST estricto)
+    if (out2.url && out2.token) {
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = out2.url;
+      const inp = document.createElement("input");
+      inp.type = "hidden";
+      inp.name = "token_ws";
+      inp.value = out2.token;
+      form.appendChild(inp);
+      document.body.appendChild(form);
+      form.submit();
+      return;
+    }
+
+    // Último recurso
+    router.replace(`/gracias/${out1.id}`);
+  } catch (err) {
+    alert((err as Error).message);
+  } finally {
+    setLoading(false);
+  }
 }
 
-      // Fallback para flujos que requieren POST token_ws
-      if (out2.url && out2.token) {
-        const f = document.createElement("form");
-        f.method = "POST"; f.action = out2.url;
-        const i = document.createElement("input");
-        i.type = "hidden"; i.name = "token_ws"; i.value = out2.token;
-        f.appendChild(i); document.body.appendChild(f); f.submit();
-        return;
-      }
-
-      alert(out2.error ?? "No se pudo iniciar pago Webpay");
-    } catch (err) {
-      alert((err as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   if (!hydrated) return null;
 
