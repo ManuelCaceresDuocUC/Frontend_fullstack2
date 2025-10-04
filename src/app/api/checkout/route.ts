@@ -1,152 +1,116 @@
-// src/app/api/checkout/route.ts
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { PaymentMethod, PaymentStatus } from "@prisma/client";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+type ItemIn =
+  | { id: string; qty: number }                 // perfume base
+  | { variantId: string; qty: number };         // variante
 
-type Line = { variantId: string; qty: number };
 type Body = {
-  email?: string;
-  buyerName?: string;
+  email: string;
+  buyerName: string;
   phone?: string;
-  address?: { street?: string; city?: string; region?: string; zip?: string; notes?: string };
-  items?: Line[];
-  paymentMethod?: "WEBPAY" | "SERVIPAG" | "MANUAL" | "MERCADOPAGO" | "VENTIPAY";
+  address: { street: string; city: string; region: string; zip?: string; notes?: string };
+  shipping?: { fee?: number };                  // provider no existe en Order (usa Shipment luego)
+  items: ItemIn[];
+  paymentMethod: "WEBPAY";
 };
 
-async function parseCookieCart(): Promise<Line[]> {
-  try {
-    const jar = await cookies(); // <- await
-    const raw = jar.get("cart")?.value ?? "";
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    return arr
-      .map((x: unknown) => {
-        if (typeof x !== "object" || !x) return null;
-        const vId = (x as Record<string, unknown>).variantId;
-        const qty = Number((x as Record<string, unknown>).qty);
-        if (typeof vId === "string" && qty > 0) return { variantId: vId, qty };
-        return null;
-      })
-      .filter((x): x is Line => !!x);
-  } catch {
-    return [];
-  }
-}
-
-function mapPayment(m?: Body["paymentMethod"]): PaymentMethod {
-  if (m === "WEBPAY") return PaymentMethod.WEBPAY;
-  if (m === "SERVIPAG") return PaymentMethod.SERVIPAG;
-  return PaymentMethod.MANUAL; // fallback
-}
-
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => ({}))) as Body;
+  try {
+    const body = (await req.json()) as Body;
+    if (!Array.isArray(body.items) || body.items.length === 0)
+      return NextResponse.json({ error: "Carrito vacío" }, { status: 400 });
 
-  const fromBody = Array.isArray(body.items) ? body.items : [];
-  const fromCookie = await parseCookieCart(); // <- await
-  const raw: Line[] = (fromBody.length ? fromBody : fromCookie).filter(
-    (l): l is Line => !!l && typeof l.variantId === "string" && Number(l.qty) > 0
-  );
+    let subtotal = 0;
+    const lines: {
+      perfumeId: string;
+      variantId?: string;
+      name: string;
+      brand: string;
+      ml: number;
+      unitPrice: number;
+      qty: number;
+    }[] = [];
 
-  if (raw.length === 0) {
-    return NextResponse.json({ error: "carrito vacío" }, { status: 400 });
-  }
+    for (const it of body.items) {
+      const qty = Number(it.qty);
+      if (!Number.isInteger(qty) || qty < 1) return NextResponse.json({ error: "Cantidad inválida" }, { status: 400 });
 
-  // Cargar variantes
-  const ids = raw.map((l) => l.variantId);
-  const variants = await prisma.perfumeVariant.findMany({
-    where: { id: { in: ids } },
-    select: {
-      id: true, ml: true, price: true, stock: true, active: true, perfumeId: true,
-      perfume: { select: { name: true, brand: true } },
-    },
-  });
-  const byId = new Map(variants.map((v) => [v.id, v]));
+      if ("variantId" in it && it.variantId) {
+        const v = await prisma.perfumeVariant.findUnique({
+          where: { id: it.variantId },
+          select: { id: true, ml: true, price: true, perfume: { select: { id: true, name: true, brand: true } } },
+        });
+        if (!v) return NextResponse.json({ error: "Variante no encontrada" }, { status: 400 });
+        if (!v.price || v.price <= 0) return NextResponse.json({ error: "Precio de variante inválido" }, { status: 400 });
 
-  // Normalizar contra stock
-  const checked = raw
-    .map((l) => {
-      const v = byId.get(l.variantId);
-      if (!v || !v.active) return null;
-      const qty = Math.min(l.qty, v.stock);
-      if (qty <= 0) return null;
-      return {
-        variantId: v.id,
-        perfumeId: v.perfumeId,
-        name: v.perfume.name,
-        brand: v.perfume.brand,
-        ml: v.ml,
-        unitPrice: v.price,
-        qty,
-      };
-    })
-    .filter(Boolean) as Array<{
-      variantId: string; perfumeId: string; name: string; brand: string; ml: number; unitPrice: number; qty: number;
-    }>;
+        lines.push({
+          perfumeId: v.perfume.id,
+          variantId: v.id,
+          name: v.perfume.name,
+          brand: v.perfume.brand,
+          ml: v.ml,
+          unitPrice: v.price,
+          qty,
+        });
+        subtotal += v.price * qty;
+      } else if ("id" in it && it.id) {
+        const p = await prisma.perfume.findUnique({
+          where: { id: it.id },
+          select: { id: true, name: true, brand: true, ml: true, price: true },
+        });
+        if (!p) return NextResponse.json({ error: "Producto no encontrado" }, { status: 400 });
+        if (!p.price || p.price <= 0) return NextResponse.json({ error: "Precio de producto inválido" }, { status: 400 });
 
-  if (checked.length === 0) {
-    return NextResponse.json({ error: "sin stock" }, { status: 400 });
-  }
+        lines.push({
+          perfumeId: p.id,
+          name: p.name,
+          brand: p.brand,
+          ml: p.ml,
+          unitPrice: p.price,
+          qty,
+        });
+        subtotal += p.price * qty;
+      } else {
+        return NextResponse.json({ error: "Item sin identificador" }, { status: 400 });
+      }
+    }
 
-  const subtotal = checked.reduce((s, x) => s + x.unitPrice * x.qty, 0);
-  const shippingFee = 0;
-  const total = subtotal + shippingFee;
+    const shippingFee = Math.max(0, Number(body?.shipping?.fee ?? 0));
+    const total = subtotal + shippingFee;
+    if (total <= 0) return NextResponse.json({ error: "Total $0 inválido" }, { status: 400 });
 
-  const order = await prisma.$transaction(async (tx) => {
-    const created = await tx.order.create({
+    const order = await prisma.order.create({
       data: {
-        email: body.email ?? "",
-        buyerName: body.buyerName ?? "",
-        phone: body.phone ?? "",
-        shippingStreet: body.address?.street ?? "",
-        shippingCity: body.address?.city ?? "",
-        shippingRegion: body.address?.region ?? "",
-        shippingZip: body.address?.zip ?? "",
-        shippingNotes: body.address?.notes ?? "",
+        email: body.email,
+        buyerName: body.buyerName,
+        phone: body.phone || undefined,
+        shippingStreet: body.address.street,
+        shippingCity: body.address.city,
+        shippingRegion: body.address.region,
+        shippingZip: body.address.zip || undefined,     // evita null
+        shippingNotes: body.address.notes || undefined, // evita null
         subtotal,
         shippingFee,
         total,
+        items: {
+          create: lines.map(l => ({
+            perfume: { connect: { id: l.perfumeId } },
+            ...(l.variantId ? { variant: { connect: { id: l.variantId } } } : {}),
+            name: l.name,
+            brand: l.brand,
+            ml: l.ml,
+            unitPrice: l.unitPrice,
+            qty: l.qty,
+          })),
+        },
       },
+      select: { id: true, total: true },
     });
 
-    await tx.orderItem.createMany({
-      data: checked.map((l) => ({
-        orderId: created.id,
-        perfumeId: l.perfumeId,
-        variantId: l.variantId,
-        name: l.name,
-        brand: l.brand,
-        ml: l.ml,
-        unitPrice: l.unitPrice,
-        qty: l.qty,
-      })),
-    });
-
-    // Descontar stock
-    await Promise.all(
-      checked.map((l) =>
-        tx.perfumeVariant.update({
-          where: { id: l.variantId },
-          data: { stock: { decrement: l.qty } },
-        })
-      )
-    );
-
-    await tx.payment.create({
-      data: {
-        orderId: created.id,
-        method: mapPayment(body.paymentMethod),
-        status: PaymentStatus.INITIATED,
-        amount: total,
-      },
-    });
-
-    return created;
-  });
-
-  return NextResponse.json({ ok: true, id: order.id, total }, { status: 200 });
+    return NextResponse.json(order);
+  } catch (e) {
+    console.error("checkout error:", e);
+    return NextResponse.json({ error: "Error en checkout" }, { status: 500 });
+  }
 }
