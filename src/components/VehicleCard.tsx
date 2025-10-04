@@ -1,4 +1,3 @@
-// components/VehicleCard.tsx
 "use client";
 import Image from "next/image";
 import Link from "next/link";
@@ -9,11 +8,12 @@ export type Vehiculo = {
   modelo: string;
   anio?: number;
   ml?: number;
-  // precios
-  precio: number;      // precio base (frasco completo)
-  price3?: number;     // 3 ml
-  price5?: number;     // 5 ml
-  price10?: number;    // 10 ml
+  // aceptar ambos nombres
+  precio?: number | string;
+  price?: number | string;
+  price3?: number | string;
+  price5?: number | string;
+  price10?: number | string;
   tipo?: "suv"|"sedan"|"hatchback"|"pickup"|"4x4"|"motocicleta"|"NICHO"|"ARABES"|"DISENADOR"|"OTROS";
   combustible?: "gasolina" | "diesel" | "hibrido" | "electrico";
   transmision?: "manual" | "automatica" | "cvt";
@@ -23,25 +23,31 @@ export type Vehiculo = {
 const fmt = (n: number) =>
   n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
-const valid = (x: unknown): x is number =>
-  typeof x === "number" && Number.isFinite(x) && x > 0;
+const toNum = (x: unknown): number | null => {
+  if (x == null) return null;
+  if (typeof x === "number") return Number.isFinite(x) && x > 0 ? x : null;
+  if (typeof x === "string") {
+    const n = Number(x.replace(/\s+/g, ""));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  return null;
+};
 
 export default function VehicleCard({ v, compact = false }: { v?: Vehiculo; compact?: boolean }) {
   if (!v) return null;
 
-  // perfume si trae ml o no trae año
   const isPerfume = v.ml != null || v.anio == null || v.anio === 0;
 
-  // candidatos decant > 0
-  const decants = [v.price3, v.price5, v.price10].filter(valid);
-  const hasDecants = decants.length > 0;
+  const base = toNum(v.precio ?? v.price);               // <- clave
+  const d3 = toNum(v.price3);
+  const d5 = toNum(v.price5);
+  const d10 = toNum(v.price10);
 
-  const base = valid(v.precio) ? v.precio : null;
+  const decants = [d3, d5, d10].filter((n): n is number => n != null);
+  const hasDecants = decants.length > 0;
   const desde = hasDecants ? Math.min(...decants) : null;
 
-  // si hay decants válidos uso el mínimo; si no, el base; si nada válido => null
   const priceToShow = (hasDecants ? desde : base) ?? null;
-
   const showDesdeBadge = isPerfume && hasDecants && desde != null && (base == null || desde < base);
 
   const wrapperCls = isPerfume
