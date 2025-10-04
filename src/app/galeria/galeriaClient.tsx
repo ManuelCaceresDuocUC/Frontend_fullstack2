@@ -92,8 +92,9 @@ export default function GaleriaClient() {
       price5: p.price5 ?? undefined,
       price10: p.price10 ?? undefined,
 
-      categoria: (p.categoria as any) ?? "OTROS",
-      genero: (p.genero as any) ?? "UNISEX",
+      // DESPUÉS
+categoria: (p.categoria as typeof CATS[number] | undefined) ?? "OTROS",
+genero: (p.genero as "HOMBRE" | "MUJER" | "UNISEX" | undefined) ?? "UNISEX",
       imagen: (p.imagenes?.[0]) ? resolveImg(p.imagenes[0]) : FALLBACK_IMG,
     }));
 
