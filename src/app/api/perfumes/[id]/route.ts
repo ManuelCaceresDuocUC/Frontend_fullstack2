@@ -1,34 +1,38 @@
+// src/app/api/perfumes/[id]/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export async function GET(
-  _req: Request,
-  ctx: { params: { id: string } }
-) {
-  const { id } = ctx.params;
+// Extrae el id de /api/perfumes/:id sin usar el 2º argumento
+function getIdFromUrl(req: Request): string | null {
+  const m = new URL(req.url).pathname.match(/\/api\/perfumes\/([^\/?#]+)/i);
+  return m?.[1] ?? null;
+}
 
-  const perfume = await prisma.perfume.findUnique({
+export async function GET(req: Request) {
+  const id = getIdFromUrl(req);
+  if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
+
+  const p = await prisma.perfume.findUnique({
     where: { id },
     include: { variants: true },
   });
+  if (!p) return NextResponse.json({ error: "not found" }, { status: 404 });
 
-  if (!perfume) {
-    return NextResponse.json({ error: "No existe" }, { status: 404 });
-  }
+  const imgs: string[] = Array.isArray(p.images) ? (p.images as unknown as string[]) : [];
 
   return NextResponse.json({
-    id: perfume.id,
-    name: perfume.name,
-    brand: perfume.brand,
-    ml: perfume.ml,
-    price: perfume.price,
-    images: perfume.images,
-    description: perfume.description,
-    createdAt: perfume.createdAt,
-    variants: perfume.variants.map((v) => ({
+    id: p.id,
+    name: p.name,
+    brand: p.brand,
+    ml: p.ml,
+    price: p.price,
+    images: imgs,
+    description: p.description,
+    createdAt: p.createdAt,
+    variants: p.variants.map(v => ({
       id: v.id,
       ml: v.ml,
       price: v.price,
@@ -36,4 +40,19 @@ export async function GET(
       active: v.active,
     })),
   });
+}
+
+export async function DELETE(req: Request) {
+  const id = getIdFromUrl(req);
+  if (!id) return NextResponse.json({ error: "missing id" }, { status: 400 });
+
+  const exists = await prisma.perfume.findUnique({ where: { id }, select: { id: true } });
+  if (!exists) return NextResponse.json({ error: "no existe" }, { status: 404 });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.perfumeVariant.deleteMany({ where: { perfumeId: id } });
+    await tx.perfume.delete({ where: { id } });
+  });
+
+  return NextResponse.json({ ok: true });
 }
