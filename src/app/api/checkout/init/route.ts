@@ -10,8 +10,10 @@ export async function POST(req: Request) {
   const { orderId } = (await req.json()) as { orderId: string };
   const order = await prisma.order.findUnique({ where: { id: orderId }, select: { id: true, total: true } });
   if (!order || order.total <= 0) return NextResponse.json({ error: "Orden inválida" }, { status: 400 });
+  const base = process.env.PUBLIC_BASE_URL?.replace(/\/+$/, "");
+  if (!base) throw new Error("PUBLIC_BASE_URL no definido");
+  const returnUrl = `${base}/pago/webpay/retorno`;
 
-  const returnUrl = `${process.env.PUBLIC_BASE_URL}/pago/webpay/retorno`;
   const { url, token } = await webpayTx.create({
     buyOrder: order.id,
     sessionId: order.id,

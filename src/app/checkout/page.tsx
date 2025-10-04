@@ -163,16 +163,16 @@ const out2 = await r2.json().catch(() => ({}));
 if (r2.ok && out2.url && out2.token) {
   const form = document.createElement("form");
   form.method = "POST";
-  form.action = out2.url as string;
+  form.action = out2.url; // en mock será "/pago/webpay/mock"; en prod, la URL de Transbank
 
   const input = document.createElement("input");
   input.type = "hidden";
   input.name = "token_ws";
-  input.value = out2.token as string;
+  input.value = out2.token;
 
   form.appendChild(input);
   document.body.appendChild(form);
-  form.submit(); // ← POST real a Webpay o a tu mock
+  form.submit();
 } else {
   router.replace(`/gracias/${out1.id}`);
 }
