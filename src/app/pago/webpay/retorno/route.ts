@@ -6,38 +6,35 @@ import { webpayTx } from "@/lib/webpay";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
-  try {
-    const form = await req.formData();
-    const token = String(form.get("token_ws") || "");
-
-    if (!token) {
-      return NextResponse.redirect(new URL("/gracias/error?m=falta_token", process.env.PUBLIC_BASE_URL!).toString());
-    }
-
-    const result = await webpayTx.commit(token); // { buyOrder, amount, status }
-
-    // busca por providerTxId; si no, usa buyOrder
-    const payment = await prisma.payment.findFirst({
-      where: { providerTxId: token },
-      select: { orderId: true },
-    });
-    const orderId = payment?.orderId ?? result.buyOrder;
-
-    if (result.status === "AUTHORIZED") {
-      await prisma.payment.update({ where: { orderId }, data: { status: "PAID" } });
-      await prisma.order.update({ where: { id: orderId }, data: { status: "PAID" } });
-      return NextResponse.redirect(new URL(`/gracias/${orderId}`, process.env.PUBLIC_BASE_URL!).toString());
-    }
-
-    await prisma.payment.update({ where: { orderId }, data: { status: "FAILED" } });
-    return NextResponse.redirect(new URL(`/gracias/${orderId}?estado=rechazado`, process.env.PUBLIC_BASE_URL!).toString());
-  } catch (e) {
-    console.error("retorno error:", e);
-    return NextResponse.redirect(new URL("/gracias/error?m=retorno", process.env.PUBLIC_BASE_URL!).toString());
+async function readToken(req: Request): Promise<string | null> {
+  if (req.method === "POST") {
+    const fd = await req.formData();
+    return (fd.get("token_ws") as string) ?? null;
   }
+  const u = new URL(req.url);
+  return u.searchParams.get("token_ws");
 }
 
-export async function GET() {
-  return NextResponse.redirect(new URL("/gracias/error?m=uso_get", process.env.PUBLIC_BASE_URL!).toString());
+export async function GET(req: Request) {
+  const token = await readToken(req);
+  if (!token) return NextResponse.json({ error: "token_ws faltante" }, { status: 400 });
+
+  const r = await webpayTx.commit(token);
+  // en mock, buyOrder = token sin prefijo; ajusta si cambiaste lógica
+  const orderId = r.buyOrder;
+
+  // marca pago y orden
+  await prisma.payment.updateMany({
+    where: { orderId },
+    data: { status: r.status === "AUTHORIZED" ? "AUTHORIZED" : "FAILED" },
+  });
+  if (r.status === "AUTHORIZED") {
+    await prisma.order.update({ where: { id: orderId }, data: { status: "PAID" } });
+  }
+
+  return NextResponse.redirect(`/gracias/${orderId}`);
+}
+
+export async function POST(req: Request) {
+  return GET(req); // Transbank real llega por POST; mock por GET
 }

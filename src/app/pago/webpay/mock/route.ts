@@ -1,20 +1,13 @@
 // src/app/pago/webpay/mock/route.ts
+import { NextResponse } from "next/server";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
-  const form = await req.formData();
-  const token = String(form.get("token_ws") || "");
-
-  const html = `<!doctype html><html><body>
-  <form id="f" method="post" action="/pago/webpay/retorno">
-    <input type="hidden" name="token_ws" value="${token}">
-  </form>
-  <script>document.getElementById('f').submit()</script>
-  </body></html>`;
-  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
-}
-
-export async function GET() {
-  return new Response("Mock Webpay listo. Usa POST con token_ws.", { status: 200 });
+export async function POST(req: Request, ctx: { url: string }) {
+  const u = new URL(ctx.url);
+  const ret = u.searchParams.get("return") || "/";
+  const fd = await req.formData();
+  const token = String(fd.get("token_ws") ?? "");
+  return NextResponse.redirect(`${ret}?token_ws=${encodeURIComponent(token)}`);
 }
