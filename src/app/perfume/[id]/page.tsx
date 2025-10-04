@@ -89,7 +89,7 @@ export default function Page() {
 
         <div className="rounded-2xl border border-white/20 bg-white/10 backdrop-blur p-6">
           <h1 className="text-3xl font-extrabold">{data.brand} {data.name}</h1>
-          <p className="mt-1 text-white/80">Frasco: {data.ml} ml • {fmt(data.price)}</p>
+          <p className="mt-1 text-white/80">Frasco: {data.ml} ml </p>
 
           <div className="mt-4 space-y-3">
             {options.map(({ ml, price, stock, variantId }) => (
