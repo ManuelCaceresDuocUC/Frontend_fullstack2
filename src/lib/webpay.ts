@@ -1,22 +1,26 @@
 // src/lib/webpay.ts
 const MODE = (process.env.WEBPAY_MODE || "mock").toLowerCase();
 
+// MOCK: ignora returnUrl y usa ruta local
 async function mockCreate(_: { buyOrder: string; sessionId: string; amount: number; returnUrl: string }) {
   const token = `mock_${Date.now()}`;
-  const url = `${process.env.PUBLIC_BASE_URL}/pago/webpay/mock`; // ← local, no Transbank
-  return { url, token };
+  return { url: "/pago/webpay/mock", token }; // ← relativo, sin PUBLIC_BASE_URL
 }
 async function mockCommit(token: string) {
   return { buyOrder: token.replace(/^mock_/, ""), amount: 0, status: "AUTHORIZED" as const };
 }
 
+// TODO: implementar prod con SDK real
+async function prodCreate(_input: { buyOrder: string; sessionId: string; amount: number; returnUrl: string }) {
+  throw new Error("Implementa Webpay prod");
+}
+async function prodCommit(_token: string) {
+  throw new Error("Implementa Webpay prod");
+}
+
 export const webpayTx = {
-  async create(i: { buyOrder: string; sessionId: string; amount: number; returnUrl: string }) {
-    return MODE === "prod" ? /* prodCreate(i) */ Promise.reject(new Error("Implementa prod")) : mockCreate(i);
-  },
-  async commit(t: string) {
-    return MODE === "prod" ? /* prodCommit(t) */ Promise.reject(new Error("Implementa prod")) : mockCommit(t);
-  },
+  create: (i: { buyOrder: string; sessionId: string; amount: number; returnUrl: string }) =>
+    MODE === "prod" ? prodCreate(i) : mockCreate(i),
+  commit: (t: string) => (MODE === "prod" ? prodCommit(t) : mockCommit(t)),
 };
 export default webpayTx;
-
