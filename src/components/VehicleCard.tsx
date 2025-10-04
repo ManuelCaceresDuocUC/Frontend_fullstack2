@@ -23,17 +23,26 @@ export type Vehiculo = {
 const fmt = (n: number) =>
   n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
+const valid = (x: unknown): x is number =>
+  typeof x === "number" && Number.isFinite(x) && x > 0;
+
 export default function VehicleCard({ v, compact = false }: { v?: Vehiculo; compact?: boolean }) {
   if (!v) return null;
 
   // perfume si trae ml o no trae año
   const isPerfume = v.ml != null || v.anio == null || v.anio === 0;
 
-  // precios “decant”
-  const hasDecants = [v.price3, v.price5, v.price10].some((x) => typeof x === "number");
-  const candidates = [v.price3, v.price5, v.price10, v.precio].filter((x): x is number => typeof x === "number");
-  const desde = candidates.length ? Math.min(...candidates) : v.precio;
-  const priceToShow = isPerfume && hasDecants ? desde : v.precio;
+  // candidatos decant > 0
+  const decants = [v.price3, v.price5, v.price10].filter(valid);
+  const hasDecants = decants.length > 0;
+
+  const base = valid(v.precio) ? v.precio : null;
+  const desde = hasDecants ? Math.min(...decants) : null;
+
+  // si hay decants válidos uso el mínimo; si no, el base; si nada válido => null
+  const priceToShow = (hasDecants ? desde : base) ?? null;
+
+  const showDesdeBadge = isPerfume && hasDecants && desde != null && (base == null || desde < base);
 
   const wrapperCls = isPerfume
     ? `relative w-full aspect-[3/4] bg-white ${compact ? "p-2" : "p-4"}`
@@ -60,8 +69,8 @@ export default function VehicleCard({ v, compact = false }: { v?: Vehiculo; comp
         </h3>
 
         <p className={compact ? "text-emerald-700 font-bold" : "text-emerald-700 font-extrabold"}>
-          {isPerfume && hasDecants && <span className="mr-1 text-neutral-500 text-xs">desde</span>}
-          {fmt(priceToShow)}
+          {showDesdeBadge && <span className="mr-1 text-neutral-500 text-xs">desde</span>}
+          {priceToShow != null ? fmt(priceToShow) : "Consultar"}
         </p>
 
         <div className={`mt-1 flex flex-wrap gap-2 ${compact ? "text-[11px]" : "text-xs"}`}>
