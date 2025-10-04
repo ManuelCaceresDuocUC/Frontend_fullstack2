@@ -1,7 +1,7 @@
 // src/app/api/perfumes/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Prisma, Perfume, PerfumeCategory, Genero } from "@prisma/client";
+import { Prisma, PerfumeCategory, Genero } from "@prisma/client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,9 +33,18 @@ type ApiPerfume = {
   imagenes: string[];
   imagen: string | null;
   categoria: CategoriaApi;
+  genero: GeneroApi;
   createdAt: string;
   stock: number;
   descripcion: string;
+
+  // NUEVO: precios y stock por decants
+  price3?: number | null;
+  price5?: number | null;
+  price10?: number | null;
+  stock3?: number | null;
+  stock5?: number | null;
+  stock10?: number | null;
 };
 
 type PerfumeWithVariants = Prisma.PerfumeGetPayload<{ include: { variants: true } }>;
@@ -53,11 +62,13 @@ const cleanDesc = (v: unknown): string | null => {
   return t ? t.slice(0, 10_000) : null;
 };
 
+const roundCLP = (n: number) => Math.ceil(n / 10) * 10;
+
 const apiToDbCat = (c: unknown): PerfumeCategory => {
   const u = norm(c);
   if (u === "NICHO") return "NICHO";
   if (u === "ARABES") return "ARABES";
-  if (u === "DISENADOR") return "DISENADOR"; // “DISEÑADOR” => DISENADOR
+  if (u === "DISENADOR" || u === "DISEÑADOR" || u === "DISENADOR") return "DISENADOR"; // “DISEÑADOR”
   return "OTROS";
 };
 
@@ -71,13 +82,34 @@ const apiToDbGenero = (g: unknown): Genero => {
   return "UNISEX";
 };
 
+const dbToApiGenero = (g: Genero): GeneroApi => g as GeneroApi;
+
 const jsonToStringArray = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 
 /* ===== Mapeo ===== */
 const toApi = (p: PerfumeWithVariants): ApiPerfume => {
   const imgs = jsonToStringArray(p.images as unknown);
-  const stock = (p.variants ?? []).reduce((s, v) => s + Number(v.stock ?? 0), 0);
+
+  // variantes 3/5/10 activas
+  const v3 = p.variants.find(v => v.ml === 3 && v.active);
+  const v5 = p.variants.find(v => v.ml === 5 && v.active);
+  const v10 = p.variants.find(v => v.ml === 10 && v.active);
+
+  // fallback de precio por ml (si falta price en la variante)
+  const perMl = p.price > 0 && p.ml > 0 ? p.price / p.ml : 0;
+
+  const price3 = v3 ? (v3.price > 0 ? v3.price : roundCLP(perMl * 3)) : null;
+  const price5 = v5 ? (v5.price > 0 ? v5.price : roundCLP(perMl * 5)) : null;
+  const price10 = v10 ? (v10.price > 0 ? v10.price : roundCLP(perMl * 10)) : null;
+
+  const stock3 = v3?.stock ?? null;
+  const stock5 = v5?.stock ?? null;
+  const stock10 = v10?.stock ?? null;
+
+  const stockTotal =
+    Number(stock3 ?? 0) + Number(stock5 ?? 0) + Number(stock10 ?? 0);
+
   return {
     id: p.id,
     nombre: p.name,
@@ -87,9 +119,17 @@ const toApi = (p: PerfumeWithVariants): ApiPerfume => {
     imagenes: imgs,
     imagen: imgs[0] ?? null,
     categoria: dbToApiCat(p.tipo),
+    genero: dbToApiGenero(p.genero),
     createdAt: p.createdAt.toISOString(),
-    stock,
+    stock: stockTotal,
     descripcion: p.description ?? "",
+
+    price3,
+    price5,
+    price10,
+    stock3,
+    stock5,
+    stock10,
   };
 };
 
@@ -108,6 +148,7 @@ export async function GET(req: Request) {
     orderBy: { createdAt: "desc" },
     include: { variants: true },
   });
+
   return NextResponse.json(list.map((x) => toApi(x)));
 }
 
@@ -156,7 +197,7 @@ export async function POST(req: Request) {
           ml: Number(v.ml) || 0,
           price: Number(v.price) || 0,
           stock: Number(v.stock ?? 0),
-          active: Boolean(v.active ?? true),
+          active: v.active === false ? false : true,
         })),
       });
     }
@@ -212,7 +253,7 @@ export async function PATCH(req: Request) {
           ml: Number(v.ml) || 0,
           price: Number(v.price) || 0,
           stock: Number(v.stock ?? 0),
-          active: Boolean(v.active ?? true),
+          active: v.active === false ? false : true,
         })),
       }),
     ]);

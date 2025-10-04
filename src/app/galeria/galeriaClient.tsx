@@ -57,6 +57,10 @@ type ApiPerfume = {
   price3?: number | null;
   price5?: number | null;
   price10?: number | null;
+  // NUEVO: stocks por variante
+  stock3?: number | null;
+  stock5?: number | null;
+  stock10?: number | null;
 };
 
 /* ====== Item local: Vehiculo + categoría + género ====== */
@@ -78,37 +82,45 @@ const roundCLP = (n: number) => Math.ceil(n / 10) * 10;
   fetch("/api/perfumes")
     .then(r => r.json())
     .then((rows: ApiPerfume[]) => {
-      const mapped: Item[] = rows.map((p) => {
-        const cat: Categoria =
-          p.categoria && ["NICHO","ARABES","DISEÑADOR","OTROS"].includes(String(p.categoria))
-            ? (p.categoria as Categoria)
-            : "OTROS";
-        const gen: Genero =
-          p.genero && ["HOMBRE","MUJER","UNISEX"].includes(String(p.genero))
-            ? (p.genero as Genero)
-            : "UNISEX";
+  const mapped: Item[] = rows.map((p) => {
+    const cat: Categoria =
+      p.categoria && ["NICHO","ARABES","DISEÑADOR","OTROS"].includes(String(p.categoria))
+        ? (p.categoria as Categoria)
+        : "OTROS";
+    const gen: Genero =
+      p.genero && ["HOMBRE","MUJER","UNISEX"].includes(String(p.genero))
+        ? (p.genero as Genero)
+        : "UNISEX";
 
-        const perMl = p.precio > 0 && p.ml > 0 ? p.precio / p.ml : 0;
-        const sizes = [3, 5, 10].filter(s => s <= (p.ml ?? 0));
-        const price3  = sizes.includes(3)  ? roundCLP(perMl * 3)  : undefined;
-        const price5  = sizes.includes(5)  ? roundCLP(perMl * 5)  : undefined;
-        const price10 = sizes.includes(10) ? roundCLP(perMl * 10) : undefined;
+    const perMl = p.precio > 0 && p.ml > 0 ? p.precio / p.ml : 0;
+    const sizes = [3, 5, 10].filter(s => s <= (p.ml ?? 0));
+    const price3  = p.price3 ?? (sizes.includes(3)  ? Math.ceil((perMl * 3)  / 10) * 10 : undefined);
+    const price5  = p.price5 ?? (sizes.includes(5)  ? Math.ceil((perMl * 5)  / 10) * 10 : undefined);
+    const price10 = p.price10 ?? (sizes.includes(10) ? Math.ceil((perMl * 10) / 10) * 10 : undefined);
 
-        return {
-          id: p.id,
-          marca: p.marca ?? "N/D",
-          modelo: p.nombre ?? "N/D",
-          anio: 0,
-          ml: Number(p.ml ?? 0),
-          precio: Number(p.precio ?? 0),
-          price3:  p.price3 ?? price3,
-          price5:  p.price5 ?? price5,
-          price10: p.price10 ?? price10,
-          categoria: cat,
-          genero: gen,
-          imagen: resolveImg(p.imagenes?.[0]) || FALLBACK_IMG,
-        };
-      });
+    return {
+      id: p.id,
+      marca: p.marca ?? "N/D",
+      modelo: p.nombre ?? "N/D",
+      anio: 0,
+      // (si ya no usas v.ml en la tarjeta, puedes omitir ml aquí)
+      precio: Number(p.precio ?? 0),
+      price3: price3 ?? undefined,
+      price5: price5 ?? undefined,
+      price10: price10 ?? undefined,
+      // NUEVO: stocks que usará la tarjeta para decidir qué chips mostrar
+      stock3: Number(p.stock3 ?? 0),
+      stock5: Number(p.stock5 ?? 0),
+      stock10: Number(p.stock10 ?? 0),
+
+      categoria: cat,
+      genero: gen,
+      imagen: resolveImg(p.imagenes?.[0]) || FALLBACK_IMG,
+    };
+  });
+
+  
+
 
       setItems(mapped);
     })
