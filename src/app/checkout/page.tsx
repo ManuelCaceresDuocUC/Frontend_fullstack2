@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/store/useCart";
 import { REGIONES, COMUNAS } from "@/data/chile";
+import { prisma } from "@/lib/prisma";
 
 type PaymentMethod = "MERCADOPAGO" | "WEBPAY" | "VENTIPAY";
 type Region = (typeof REGIONES)[number];
@@ -20,7 +21,11 @@ const fmt = (n: number) =>
   n.toLocaleString("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 });
 
 const STORAGE_KEY = "checkout:v1";
-
+const malas = await prisma.perfumeVariant.findMany({
+  where: { OR: [{ price: { lte: 0 } }, { active: false }] },
+  select: { id: true, ml: true, price: true, active: true, perfume: { select: { name: true, brand: true } } },
+});
+console.log(malas);
 type SavedForm = {
   email: string;
   buyerName: string;
@@ -198,6 +203,8 @@ export default function CheckoutPage() {
       };
 
       // 1) Crea orden
+      console.log("items", payload.items); // cada línea debe tener { variantId, qty } o { id, qty }
+
       const r1 = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
