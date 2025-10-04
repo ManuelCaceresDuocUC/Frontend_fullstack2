@@ -157,14 +157,25 @@ export default function CheckoutPage() {
       if (!r1.ok) { alert(out1.error ?? "Error en checkout"); return; }
 
       // 2) Inicializa pago y redirige
-      const r2 = await fetch("/api/checkout/init", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: out1.id, paymentMethod }),
-      });
-      const out2 = await r2.json().catch(() => ({}));
+      const r2 = await fetch("/api/checkout/init", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ orderId: out1.id }) });
+const out2 = await r2.json().catch(() => ({}));
 
-      if (r2.ok && out2.redirectUrl) { window.location.href = out2.redirectUrl as string; return; }
+if (r2.ok && out2.url && out2.token) {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = out2.url as string;
+
+  const input = document.createElement("input");
+  input.type = "hidden";
+  input.name = "token_ws";
+  input.value = out2.token as string;
+
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit(); // ← POST real a Webpay o a tu mock
+} else {
+  router.replace(`/gracias/${out1.id}`);
+}
 
       // Fallback para flujos que requieren POST token_ws
       if (out2.url && out2.token) {
