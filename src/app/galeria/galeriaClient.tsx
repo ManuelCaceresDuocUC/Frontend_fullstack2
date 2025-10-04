@@ -72,24 +72,34 @@ export default function GaleriaClient() {
   const [items, setItems] = useState<Item[]>([]);
 
   useEffect(() => {
-    fetch("/api/perfumes")
-      .then(r => r.json() as Promise<ApiPerfume[]>)
-      .then(rows => {
-        const mapped: Item[] = rows.map(p => ({
-  id: p.id,
-  marca: p.marca ?? "N/D",
-  modelo: p.nombre ?? "N/D",
-  anio: 0,
-  ml: p.ml,
-  precio: Number(p.precio ?? 0),           // ⬅️ aquí
-  categoria: p.categoria ?? "OTROS",
-  genero: p.genero ?? "UNISEX",
-  imagen: resolveImg(p.imagenes?.[0] ?? p.imagen) || FALLBACK_IMG,
-}));
-        setItems(mapped);
-      })
-      .catch(() => {});
-  }, []);
+  (async () => {
+    const r = await fetch("/api/perfumes", { method: "GET", cache: "no-store" });
+    const rows = await r.json() as Array<{
+      id: string; nombre: string; marca: string; ml: number; precio: number;
+      imagenes?: string[]; genero?: string; categoria?: string;
+      price3?: number|null; price5?: number|null; price10?: number|null;
+    }>;
+
+    const mapped: Item[] = rows.map(p => ({
+      id: p.id,
+      marca: p.marca ?? "N/D",
+      modelo: p.nombre ?? "N/D",
+      anio: 0,
+      ml: p.ml,
+      precio: p.precio ?? 0,
+      // estas 3 líneas hacen que la tarjeta muestre “desde …”
+      price3: p.price3 ?? undefined,
+      price5: p.price5 ?? undefined,
+      price10: p.price10 ?? undefined,
+
+      categoria: (p.categoria as any) ?? "OTROS",
+      genero: (p.genero as any) ?? "UNISEX",
+      imagen: (p.imagenes?.[0]) ? resolveImg(p.imagenes[0]) : FALLBACK_IMG,
+    }));
+
+    setItems(mapped);
+  })().catch(() => {});
+}, []);
 
  const bounds = useMemo(() => {
   const precios = items
