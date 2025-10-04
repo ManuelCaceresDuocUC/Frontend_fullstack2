@@ -170,20 +170,42 @@ export default function CheckoutPage() {
     if (disabled) return;
     try {
       setLoading(true);
-      const payload = {
-        email,
-        buyerName,
-        phone,
-        address: {
-          street: shippingStreet,
-          city: shippingCity,
-          region: shippingRegion,
-          zip: shippingZip,
-          notes: shippingNotes,
-        },
-        items: items.map((i) => ({ id: i.id, qty: i.qty })),
-        paymentMethod,
-      };
+      // dentro de submit(), antes del fetch:
+const lineItems =
+  items
+    .map(i =>
+      i.variantId
+        ? { variantId: i.variantId, qty: i.qty }
+        : i.productId
+          ? { productId: i.productId, ml: i.ml ?? null, qty: i.qty }
+          : null
+    )
+    .filter(Boolean) as Array<
+      { variantId: string; qty: number } |
+      { productId: string; ml: number | null; qty: number }
+    >;
+
+if (lineItems.length === 0) {
+  alert("Error: carrito vacío");
+  return;
+}
+
+const payload = {
+  email,
+  buyerName,
+  phone,
+  address: {
+    street: shippingStreet,
+    city: shippingCity,
+    region: shippingRegion,
+    zip: shippingZip,
+    notes: shippingNotes,
+  },
+  items: lineItems,
+  paymentMethod,
+};
+
+      
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -382,7 +404,7 @@ export default function CheckoutPage() {
 
             <div className="space-y-4 max-h-[50vh] overflow-auto pr-1">
               {items.map((it) => (
-                <div key={`${it.id}-${it.ml ?? "x"}`} className="flex items-center gap-3">
+<div key={`${it.variantId ?? it.productId}-${it.ml ?? "x"}`} className="flex items-center gap-3">
                   {it.image ? (
                     <div className="relative h-16 w-16 rounded overflow-hidden bg-slate-100">
                       <Image src={it.image} alt={it.name} fill className="object-cover" />
