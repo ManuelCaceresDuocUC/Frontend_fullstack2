@@ -24,8 +24,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
         <Providers>
           <Navbar />
+          <ShippingMarquee className="sticky top-[56px]" /> {/* ajusta el top a la altura de tu navbar */}
+
           <main className="flex-1">{children}</main>
-                  <ShippingMarquee className="sticky top-[56px]" /> {/* ajusta el top a la altura de tu navbar */}
+          <ShippingMarquee className="sticky top-[56px]" /> {/* ajusta el top a la altura de tu navbar */}
 
           <CartFab />
           <CartDrawer />
