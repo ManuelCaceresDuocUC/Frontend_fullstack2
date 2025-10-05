@@ -278,7 +278,33 @@ export default function CheckoutPage() {
                 ))}
               </div>
             </section>
-
+            {/* === Datos del comprador === */}
+            <section className="rounded-2xl border border-slate-200 p-4 md:p-6">
+              <h2 className="font-semibold text-lg mb-4">Datos del comprador</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm mb-1">Nombre completo</label>
+                  <input
+                    required value={buyerName} onChange={(e) => setBuyerName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="Nombre y apellido"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">Correo electrónico</label>
+                  <input
+                    required type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="tu@correo.cl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">Teléfono (opcional)</label>
+                  <input
+                    value={phone} onChange={(e) => setPhone(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2" placeholder="+56 9 1234 5678"
+                  />
+                </div>
+              </div>
+            </section>
             <section className="rounded-2xl border border-slate-200 p-4 md:p-6">
               <h2 className="font-semibold text-lg mb-4">Dirección de envío</h2>
               <div className="grid md:grid-cols-2 gap-4">
@@ -356,6 +382,13 @@ export default function CheckoutPage() {
               {shippingQuoted && shippingReason && (<p className="text-xs text-slate-500">{shippingReason}</p>)}
               <div className="border-t my-2" />
               <div className="flex justify-between text-base font-extrabold"><span>Total</span><span>{fmt(total)}</span></div>
+              <div className="border-t my-2" />
+              <div className="text-xs text-slate-600 space-y-1">
+                <div><span className="font-medium">Comprador: </span>{buyerName || "—"}</div>
+                <div><span className="font-medium">Email: </span>{email || "—"}</div>
+                {phone ? <div><span className="font-medium">Tel: </span>{phone}</div> : null}
+              </div>
+              <div className="border-t my-2" />
             </div>
           </aside>
         </div>

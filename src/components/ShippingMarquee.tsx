@@ -98,10 +98,10 @@ export default function ShippingMarquee({
   className = "",
 }: { threshold?: number; className?: string }) {
   const items = [
-    `Domicilio desde $${TARIFF_TABLE.home.misma_zona_region.XS.toLocaleString("es-CL")} (XS)`,
-    `Punto Bluexpress desde $${TARIFF_TABLE.pickup.misma_zona_region.XS.toLocaleString("es-CL")} (XS)`,
-    `Interregional centro desde $${TARIFF_TABLE.home.centro_interregional.XS.toLocaleString("es-CL")} (XS)`,
-    `Interregional extremo desde $${TARIFF_TABLE.home.extremo_interregional.XS.toLocaleString("es-CL")} (XS)`,
+    `Envío a Domicilio desde: $${TARIFF_TABLE.home.misma_zona_region.XS.toLocaleString("es-CL")} (XS)`,
+    `Envío a Punto Bluexpress desde: $${TARIFF_TABLE.pickup.misma_zona_region.XS.toLocaleString("es-CL")} (XS)`,
+    `Envío Interregional centro desde $${TARIFF_TABLE.home.centro_interregional.XS.toLocaleString("es-CL")} (XS)`,
+    `Envío Interregional extremo desde $${TARIFF_TABLE.home.extremo_interregional.XS.toLocaleString("es-CL")} (XS)`,
     `Envío gratis desde $${threshold.toLocaleString("es-CL")}`,
   ];
 
@@ -118,7 +118,7 @@ export default function ShippingMarquee({
         <div className="flex items-center gap-3 py-2">
           <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-800/80 text-xs">ℹ️</span>
           <div className="relative overflow-hidden whitespace-nowrap flex-1">
-            <div className="track inline-flex items-center gap-12 will-change-transform" style={{ animation: `marquee 24000ms linear infinite` }}>
+            <div className="track inline-flex items-center gap-12 will-change-transform" style={{ animation: `marquee 20000ms linear infinite` }}>
               {data.map((t, i) => (
                 <span key={i} className="text-sm md:text-[0.95rem] font-medium opacity-90 hover:opacity-100 transition-opacity">
                   {t}

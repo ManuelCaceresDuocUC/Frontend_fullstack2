@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { webpayTx } from "@/lib/webpay";
 import { db } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { OrderStatus, PaymentStatus } from "@prisma/client";
+
 type Tx = Prisma.TransactionClient;
 
 export const runtime = "nodejs";
@@ -56,11 +58,11 @@ async function finalize(token: string) {
   await db.$transaction(async (tx) => {
     await tx.payment.update({
       where: { orderId },
-      data: { status: paid ? "PAID" : "FAILED" },
+      data: { status: paid ? PaymentStatus.PAID : PaymentStatus.FAILED },
     }).catch(() => undefined);
 
     if (paid) {
-      await tx.order.update({ where: { id: orderId }, data: { status: "PAID" } }).catch(() => undefined);
+      await tx.order.update({ where: { id: orderId }, data: { status: OrderStatus.PAID } }).catch(() => undefined);
       await discountStock(tx, orderId);
     }
   });
@@ -69,7 +71,7 @@ async function finalize(token: string) {
 }
 
 async function finalizeOrder(tx: Tx, orderId: string) {
-  await tx.order.update({ where: { id: orderId }, data: { status: "PAID" } });
+  await tx.order.update({ where: { id: orderId }, data: { status: OrderStatus.PAID } });
 }
 
 export async function POST(req: Request) {
@@ -80,7 +82,7 @@ export async function POST(req: Request) {
     if (!pv) throw new Error("Variant no encontrado");
 
     await finalizeOrder(tx, body.orderId);
-    // más lógica con tx.* si aplica
+    // lógica adicional si aplica
   });
 
   return NextResponse.json({ ok: true });
