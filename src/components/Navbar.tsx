@@ -238,10 +238,7 @@ export default function Navbar() {
         )}
       </div>
 
-      {/* Marquee dentro del header, debajo de todo */}
-      <div className="border-t border-slate-200">
-        <ShippingMarquee />
-      </div>
+     
     </header>
   );
 }
