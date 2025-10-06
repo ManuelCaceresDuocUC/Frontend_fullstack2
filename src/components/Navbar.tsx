@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Menu, X, Phone } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import LogoKuyval from "@/components/LogoKuyval";
+import ShippingMarquee from "@/components/ShippingMarquee";
 
 const MotionLink = motion.create(Link);
 
@@ -28,6 +29,21 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
 }
 
 export default function Navbar() {
+  const hdrRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = hdrRef.current;
+    if (!el) return;
+    const set = () => document.documentElement.style.setProperty("--hdr-h", `${el.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    window.addEventListener("resize", set);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", set);
+    };
+  }, []);
+
   const [mDecants, setMDecants] = useState(false);
   const [openDecants, setOpenDecants] = useState(false);
   const closeTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -48,16 +64,16 @@ export default function Navbar() {
     router.push(role === "ADMIN" ? "/perfumes/nuevo" : "/perfil");
   };
 
-  // ← FIX: cerrar sesión con refresh del estado
   const doSignOut = async () => {
-    setOpen(false);                      // cierra menu móvil si estaba abierto
-    await signOut({ redirect: false });  // no redirigir automáticamente
-    router.push("/");                    // envía al home
-    router.refresh();                    // invalida caché de App Router
+    setOpen(false);
+    await signOut({ redirect: false });
+    router.push("/");
+    router.refresh();
   };
 
   return (
-    <header className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur border-b border-slate-200 text-slate-900">
+    <header ref={hdrRef} className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur border-b border-slate-200 text-slate-900">
+      {/* Fila superior */}
       <div className="hidden md:flex justify-end text-slate-500 text-sm pr-4 md:pr-8 pt-2">
         <a href="tel:+56912345678" className="flex items-center gap-2 hover:text-slate-700">
           <Phone className="h-4 w-4" />
@@ -65,6 +81,7 @@ export default function Navbar() {
         </a>
       </div>
 
+      {/* Fila principal */}
       <div className="relative mx-auto max-w-7xl px-4 md:px-8 pb-3">
         <div className="mt-3 flex items-center justify-between px-2 py-3">
           <Link href="/" className="flex items-center gap-3" aria-label="Inicio Kuyval">
@@ -183,7 +200,6 @@ export default function Navbar() {
               </button>
               {mDecants && (
                 <div className="pl-3 pb-2">
-                  {/* ...links del acordeón... */}
                   <Link href="/galeria?decants=1" className="block mt-3 text-sm text-blue-600 px-2">Ver todo Decants →</Link>
                 </div>
               )}
@@ -220,6 +236,11 @@ export default function Navbar() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Marquee dentro del header, debajo de todo */}
+      <div className="border-t border-slate-200">
+        <ShippingMarquee />
       </div>
     </header>
   );
