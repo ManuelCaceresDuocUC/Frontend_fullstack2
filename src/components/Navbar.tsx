@@ -102,7 +102,7 @@ export default function Navbar() {
 
               {openDecants && (
                 <div
-                  className="absolute left-1/2 -translate-x-1/2 mt-2 w-[720px] rounded-2xl border border-slate-200 bg-white shadow-xl p-6"
+                  className="absolute left-1/2 -translate-x-1/2 mt-2 w-[720px] rounded-2xl border border-slate-200 bg-white shadow-xl p-6 z-[60]"
                   onMouseEnter={handleEnter}
                   onMouseLeave={handleLeave}
                 >
