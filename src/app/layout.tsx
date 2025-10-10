@@ -26,7 +26,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           {/* Navbar (fixed dentro del componente) */}
           <Navbar />
-
+    
+    
           {/* Marquee fijo debajo del navbar. No bloquea hover del menú */}
           <div
             className="fixed inset-x-0 z-30 pointer-events-none"

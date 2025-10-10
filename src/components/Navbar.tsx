@@ -77,7 +77,7 @@ export default function Navbar() {
       <div className="hidden md:flex justify-end text-slate-500 text-sm pr-4 md:pr-8 pt-2">
         <a href="tel:+56912345678" className="flex items-center gap-2 hover:text-slate-700">
           <Phone className="h-4 w-4" />
-          +56 9 1234 5678
+          +56 9 96654293
         </a>
       </div>
 
@@ -90,15 +90,17 @@ export default function Navbar() {
 
           {/* Desktop */}
           <nav className="hidden md:flex items-center gap-2">
+            <NavLink href="/">Inicio</NavLink>
             <div className="relative" onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
-              <button
+              <MotionLink
+                href="/galeria?decants=1"
                 type="button"
                 className="px-4 py-2 rounded-xl font-medium text-slate-700 hover:text-slate-900"
                 aria-haspopup="true"
                 aria-expanded={openDecants}
               >
                 Decants
-              </button>
+              </MotionLink>
 
               {openDecants && (
                 <div
@@ -141,7 +143,7 @@ export default function Navbar() {
               )}
             </div>
 
-            <NavLink href="/">Inicio</NavLink>
+            
             <NavLink href="/contact">Contacto</NavLink>
 
             {session ? (

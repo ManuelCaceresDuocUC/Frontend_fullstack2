@@ -126,15 +126,7 @@ export default function ShippingMarquee({
               ))}
             </div>
           </div>
-          <button
-            className="ml-2 text-xs px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
-            onMouseDown={(e) => toggleAnimation(true)}
-            onMouseUp={(e) => toggleAnimation(false)}
-            onFocus={() => toggleAnimation(true)}
-            onBlur={() => toggleAnimation(false)}
-          >
-            Pausar
-          </button>
+          
         </div>
       </div>
       <style jsx>{`

@@ -2,12 +2,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildInvoicePDF } from "@/lib/invoice";
-import nodemailer from "nodemailer";
+import { sendEmail } from "@/lib/sendEmail";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/* =========================
+ * Helpers de validación/ID
+ * ========================= */
 type Ctx = { params: { id: string } };
+
 function isCtx(x: unknown): x is Ctx {
   return (
     typeof x === "object" &&
@@ -18,14 +22,19 @@ function isCtx(x: unknown): x is Ctx {
     typeof (x as { params: { id?: unknown } }).params.id === "string"
   );
 }
+
 function makeInvoiceNumber(o: { id: string; createdAt: Date }) {
   return `B-${String(o.createdAt.getFullYear()).slice(-2)}${o.id.slice(0, 6).toUpperCase()}`;
 }
+
 function fallbackTracking(orderId: string, carrier: string | null) {
   const pref = carrier === "Bluexpress" ? "BX" : "DP";
   return `${pref}-${orderId.slice(0, 8).toUpperCase()}`;
 }
 
+/* ================
+ * Handler principal
+ * ================ */
 export async function POST(_req: Request, ctx: unknown) {
   if (!isCtx(ctx)) return NextResponse.json({ error: "ID inválido" }, { status: 400 });
   const { id } = ctx.params;
@@ -40,10 +49,11 @@ export async function POST(_req: Request, ctx: unknown) {
       return NextResponse.json({ error: "La orden aún no está pagada" }, { status: 400 });
     }
 
-    const carrier = o.shipment?.carrier ?? (o.shippingRegion === "Valparaíso" ? "Despacho propio" : "Bluexpress");
+    const carrier =
+      o.shipment?.carrier ?? (o.shippingRegion === "Valparaíso" ? "Despacho propio" : "Bluexpress");
     const tracking = o.shipment?.tracking ?? fallbackTracking(o.id, carrier);
-
     const invoiceNumber = makeInvoiceNumber(o);
+
     const pdf = await buildInvoicePDF({
       orderId: o.id,
       number: invoiceNumber,
@@ -67,33 +77,15 @@ export async function POST(_req: Request, ctx: unknown) {
       },
     });
 
-    // SMTP Gmail
-    const SMTP_HOST = process.env.SMTP_HOST || "smtp.gmail.com";
-    const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-    const SMTP_SECURE = process.env.SMTP_SECURE === "true";
-    const SMTP_USER = process.env.SMTP_USER;
-    const SMTP_PASS = process.env.SMTP_PASS;
-    const SMTP_FROM = process.env.SMTP_FROM || (SMTP_USER ? `MAfums <${SMTP_USER}>` : "");
-
-    if (!SMTP_USER || !SMTP_PASS) {
-      return NextResponse.json({ error: "SMTP_USER/SMTP_PASS no configurados" }, { status: 500 });
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-    });
-
-    await transporter.sendMail({
-      from: SMTP_FROM || SMTP_USER,
+    await sendEmail({
       to: o.email,
       subject: `Boleta N° ${invoiceNumber} - Orden ${o.id}`,
       html: `<p>Gracias por tu compra.</p>
              <p>Número de envío: <strong>${tracking}</strong> (${carrier})</p>
              <p>Adjuntamos tu boleta en PDF.</p>`,
-      attachments: [{ filename: `Boleta_${invoiceNumber}.pdf`, content: pdf, contentType: "application/pdf" }],
+      attachments: [
+        { filename: `Boleta_${invoiceNumber}.pdf`, content: pdf, contentType: "application/pdf" },
+      ],
     });
 
     await prisma.shipment.upsert({

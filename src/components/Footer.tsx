@@ -21,9 +21,10 @@ export default function Footer() {
                 </span>
               </summary>
               <ul className="mt-4 space-y-2 text-sm">
-                <li><Link href="/pages/terminos-y-condiciones" className="hover:underline">Términos y Condiciones</Link></li>
-                <li><Link href="/pages/despachos" className="hover:underline">Despachos</Link></li>
-                <li><Link href="/pages/reclamos" className="hover:underline">Reclamos</Link></li>
+                <li><Link href="/terminos-y-condiciones" className="hover:underline">Términos y Condiciones</Link></li>
+                <li><Link href="/despachos" className="hover:underline">Despachos</Link></li>
+                <li><Link href="/reclamos" className="hover:underline">Reclamos</Link></li>
+                <li><a href="/privacidad">Política de Privacidad</a></li>
               </ul>
             </details>
           </section>
