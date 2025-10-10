@@ -67,7 +67,7 @@ export default function ContactPage() {
   return (
     <main className="overflow-hidden">
       {/* HERO */}
-      <section className="pt-28 md:pt-36 h-[60vh] md:h-[70vh] flex flex-col justify-center items-center text-center px-4 bg-gradient-to-b from-blue-600 to-indigo-800 text-white">
+      <section className="pt-10 md:pt-10 h-[60vh] md:h-[70vh] flex flex-col justify-center items-center text-center px-4 bg-gradient-to-b from-blue-600 to-indigo-800 text-white">
         <motion.h1
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -99,11 +99,11 @@ export default function ContactPage() {
             <div className="bg-gray-50 p-6 rounded-2xl shadow">
               <div className="flex items-center gap-3 mb-4">
                 <Mail className="h-5 w-5 text-blue-600" />
-                <span>contacto@mafums.cl</span>
+                <span>kuyval.contacto@gmail.com</span>
               </div>
               <div className="flex items-center gap-3 mb-4">
                 <Phone className="h-5 w-5 text-blue-600" />
-                <span>+56 9 1234 5678</span>
+                <span>+56 9 96654293</span>
               </div>
               <div className="flex items-center gap-3">
                 <MapPin className="h-5 w-5 text-blue-600" />

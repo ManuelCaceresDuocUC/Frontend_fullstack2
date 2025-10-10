@@ -1,24 +1,43 @@
-import React from "react";
+// app/empresa/reclamos/page.tsx
+export const metadata = {
+  title: "Reclamos y Garantía | Los Cáceres SpA",
+  description: "Procedimiento de reclamos y garantía legal.",
+};
 
-export default function ReclamosPage() {
+export default function Page() {
+  const fecha = new Date().toLocaleDateString("es-CL");
   return (
-    <main className=" pt-50" >
-      <h1 className="text-3xl font-bold">Reclamos y Contacto</h1>
+    <main className="mx-auto max-w-3xl px-4 py-10 prose prose-invert">
+      <h1>Reclamos y Garantía</h1>
+
+      <h2>1. Retracto</h2>
       <p>
-        Si tienes algún inconveniente con tu pedido, producto o despacho, por favor contáctanos para ayudarte a resolverlo.
+        Por razones de higiene, en <strong>decants</strong> no aplica retracto ni devoluciones, aun sin apertura.
       </p>
-      <h2>¿Cómo hacer un reclamo?</h2>
-      <ol>
-        <li>Escríbenos a nuestro WhatsApp: <a href="https://wa.me/56912345678" target="_blank" rel="noopener">+56 9 1234 5678</a></li>
-        <li>Indica tu número de pedido y el motivo del reclamo.</li>
-        <li>Te responderemos lo antes posible para darte una solución.</li>
-      </ol>
-      <p>
-        También puedes escribirnos a nuestro correo: <a href="mailto:contacto@perfumeria.cl">contacto@perfumeria.cl</a>
-      </p>
-      <p>
-        Nuestro horario de atención es de lunes a viernes de 9:00 a 18:00 hrs.
-      </p>
+
+      <h2>2. Garantía legal (6 meses)</h2>
+      <ul>
+        <li>Aplica por <strong>falla de origen</strong> (envase defectuoso, fuga u otro defecto del contenedor).</li>
+        <li>Opciones: reparación si es viable, cambio o devolución del dinero.</li>
+      </ul>
+
+      <h2>3. Cómo reclamar</h2>
+      <ul>
+        <li>Escribe a contacto@tudominio.cl o WhatsApp +56 9 9665 4293 con número de pedido, fecha y evidencia (foto o video).</li>
+        <li>Acusamos recibo dentro de 48 horas hábiles.</li>
+        <li>Respuesta formal en hasta 10 días hábiles.</li>
+      </ul>
+
+      <h2>4. Envío para revisión</h2>
+      <ul>
+        <li>Coordinamos retiro o devolución del producto según el caso.</li>
+        <li>Si procede garantía, cubrimos los costos de logística de la gestión.</li>
+      </ul>
+
+      <h2>5. Escalamiento</h2>
+      <p>Si no quedas conforme, puedes acudir a SERNAC.</p>
+
+      <p className="text-sm opacity-80">Última actualización: {fecha}</p>
     </main>
   );
 }
