@@ -1,31 +1,10 @@
-// src/lib/sendEmail.ts
-import nodemailer, { Transporter } from "nodemailer";
+import nodemailer from "nodemailer";
 
-let cached: Transporter | null = null;
-
-function getBool(v: string | undefined, def = false) {
-  if (v == null) return def;
-  return ["1", "true", "yes", "on"].includes(v.toLowerCase());
-}
-
-export function mailer() {
-  const host = process.env.SMTP_HOST || "smtp.gmail.com";
-  const port = Number(process.env.SMTP_PORT || 587);
-  const secure = (process.env.SMTP_SECURE === "true") || port === 465;
-
-  const allowSelfSigned = process.env.SMTP_ALLOW_SELF_SIGNED === "true";
-
-  return nodemailer.createTransport({
-    host, port, secure,
-    auth: { user: process.env.SMTP_USER!, pass: process.env.SMTP_PASS! },
-    tls: allowSelfSigned ? { rejectUnauthorized: false } : undefined,
-  });
-}
 export type Attachment = {
   filename: string;
   content: Buffer | string;
   contentType?: string;
-  cid?: string; // opcional para inline images
+  cid?: string;
 };
 
 export type SendArgs = {
@@ -41,21 +20,24 @@ export type SendArgs = {
   headers?: Record<string, string>;
 };
 
+export function mailer() {
+  const host = process.env.SMTP_HOST || "smtp.gmail.com";
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secure = process.env.SMTP_SECURE === "true"; // usa true solo si es 465
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (!user || !pass) throw new Error("SMTP_USER/SMTP_PASS no configurados");
+
+  // opcional dev: tolerar self-signed si definiste SMTP_ALLOW_SELF_SIGNED
+  const tls =
+    process.env.SMTP_ALLOW_SELF_SIGNED === "true" ? { rejectUnauthorized: false } : undefined;
+
+  return nodemailer.createTransport({ host, port, secure, auth: { user, pass }, tls });
+}
+
 export async function sendEmail(args: SendArgs) {
   const tr = mailer();
-  const from =
-    args.from || process.env.MAIL_FROM || process.env.SMTP_USER || "no-reply@localhost";
-
-  return tr.sendMail({
-    from,
-    to: args.to,
-    cc: args.cc,
-    bcc: args.bcc,
-    subject: args.subject,
-    text: args.text,
-    html: args.html,
-    attachments: args.attachments,
-    replyTo: args.replyTo,
-    headers: args.headers,
-  });
+  const from = args.from || process.env.MAIL_FROM || process.env.SMTP_USER || "no-reply@localhost";
+  return tr.sendMail({ from, ...args });
 }
