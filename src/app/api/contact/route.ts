@@ -84,7 +84,7 @@ Resumen:
 Tu mensaje:
 ${mensaje}
 
-Los Cáceres SpA`,
+Kuyval SpA`,
   });
 
   return NextResponse.json({ ok: true });
