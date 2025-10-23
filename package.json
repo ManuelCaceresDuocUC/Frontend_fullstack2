@@ -3,14 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "vitest run",
+    "test:ui": "vitest --ui",
     "db:seed": "node prisma/seed.mjs",
     "postinstall": "prisma generate",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-        "backfill:prices": "tsx scripts/backfill-variant-prices.ts"
-
+    "backfill:prices": "tsx scripts/backfill-variant-prices.ts"
   },
   "engines": {
     "node": ">=18.18"
@@ -45,6 +46,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
     "@types/bwip-js": "^3.2.3",
     "@types/node": "^20",
     "@types/node-forge": "^1.3.14",
@@ -53,15 +55,19 @@
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/ui": "4.0.2",
     "eslint": "^9",
     "eslint-config-next": "15.5.0",
+    "jsdom": "^27.0.1",
+    "msw": "^2.11.6",
     "prisma": "^6.16.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.2"
   },
   "pnpm": {
-  "overrides": {
-    "xpath": "0.0.34"
+    "overrides": {
+      "xpath": "0.0.34"
+    }
   }
-}
 }
