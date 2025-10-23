@@ -10,6 +10,7 @@ export default function PerfilPage() {
 
   const u = session.user;
 
+  
   return (
     <main className="pt-28 md:pt-36 min-h-[70vh] px-4 py-16 bg-gradient-to-b from-fuchsia-600 to-violet-800 text-white">
       <div className="max-w-3xl mx-auto">
