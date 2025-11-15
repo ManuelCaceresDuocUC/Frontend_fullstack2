@@ -10,7 +10,6 @@ export default function Home() {
   return (
     <main className="overflow-hidden">
       <Navbar />
-<div className="h-16 md:h-20" /> {/* spacer igual a la altura del navbar */}
 
       {/* HERO */}
 <section className="relative px-4 aspect-[16/9]">
