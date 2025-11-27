@@ -28,9 +28,7 @@ export default function FarmaciasPage() {
         // CAMBIO IMPORTANTE: Usamos 'corsproxy.io' en lugar de 'allorigins'.
         // Es más estable para este tipo de datos.
         const targetUrl = 'https://midas.minsal.cl/farmacia_v2/WS/getLocalesTurnos.php';
-        
-        // corsproxy.io se usa así: https://corsproxy.io/?URL_ENCODED
-        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+        const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`;
 
         const res = await fetch(proxyUrl);
         
