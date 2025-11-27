@@ -1,46 +1,42 @@
 import { NextResponse } from 'next/server';
+import https from 'https';
 
-// Definimos la interfaz de los datos que vienen del MINSAL para tener autocompletado
-interface FarmaciaTurno {
-  local_id: string;
-  local_nombre: string;
-  comuna_nombre: string;
-  localidad_nombre: string;
-  local_direccion: string;
-  funcionamiento_dia: string;
-  funcionamiento_hora_apertura: string;
-  funcionamiento_hora_cierre: string;
-  local_telefono: string;
-  local_lat: string;
-  local_lng: string;
-}
-export const dynamic = 'force-dynamic';
-
+// Desactivamos la verificación estricta de SSL solo para este agente
+const agent = new https.Agent({
+  rejectUnauthorized: false
+});
 
 export async function GET(request: Request) {
   try {
-    // 1. Obtener parámetros de búsqueda (ej: ?comuna=maipu)
     const { searchParams } = new URL(request.url);
     const comunaQuery = searchParams.get('comuna');
 
-    // 2. Llamada a la API del MINSAL
-    // Usamos revalidate para no saturar la API oficial. Los turnos duran 24hrs, 
-    // así que actualizar cada 1 hora (3600 seg) es seguro y rápido.
+    // Usamos el agente personalizado y añadimos headers para parecer un navegador
     const res = await fetch('https://midas.minsal.cl/farmacia_v2/WS/getLocalesTurnos.php', {
-      next: { revalidate: 3600 } 
+      next: { revalidate: 3600 },
+      // @ts-ignore: Next.js fetch extiende el nativo, pero TypeScript a veces reclama por 'agent'
+      agent: agent, 
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
     });
 
     if (!res.ok) {
-      throw new Error('Error al conectar con el servicio del MINSAL');
+      throw new Error(`Error del servidor MINSAL: ${res.status} ${res.statusText}`);
     }
 
-    const data: FarmaciaTurno[] = await res.json();
+    // Intentamos parsear el JSON. Si la API devuelve HTML (error), esto fallará y caerá en el catch
+    const textData = await res.text();
+    let data;
+    try {
+        data = JSON.parse(textData);
+    } catch (e) {
+        console.error("La respuesta no es un JSON válido:", textData.substring(0, 100));
+        throw new Error('La API del Minsal no devolvió un JSON válido.');
+    }
 
-    // 3. Filtrado (Opcional)
-    // Si el usuario pidió una comuna específica, filtramos el array gigante de 575 datos.
     if (comunaQuery) {
-      const dataFiltrada = data.filter((farmacia) => 
-        // Normalizamos a mayúsculas porque la API suele entregar "MAIPU" o "PROVIDENCIA"
+      const dataFiltrada = data.filter((farmacia: any) => 
         farmacia.comuna_nombre.toUpperCase().includes(comunaQuery.toUpperCase())
       );
       
@@ -50,15 +46,17 @@ export async function GET(request: Request) {
       });
     }
 
-    // 4. Si no hay filtros, devolvemos todo
     return NextResponse.json({
       cantidad: data.length,
       farmacias: data
     });
 
-  } catch (error) {
+  } catch (error: any) {
+    // Este console.error aparecerá en los LOGS de Vercel
+    console.error("❌ Error en API Farmacias:", error.message);
+    
     return NextResponse.json(
-      { error: 'Hubo un error obteniendo los turnos' },
+      { error: 'Hubo un error obteniendo los turnos', details: error.message },
       { status: 500 }
     );
   }
