@@ -25,28 +25,41 @@ export default function FarmaciasPage() {
   useEffect(() => {
     const fetchFarmacias = async () => {
       try {
-        // TRUCO: Usamos 'api.allorigins.win' para evitar el error CORS y el bloqueo 403 de Vercel.
-        // La petición ahora sale desde el navegador del cliente, no desde el servidor.
+        // CAMBIO IMPORTANTE: Usamos 'corsproxy.io' en lugar de 'allorigins'.
+        // Es más estable para este tipo de datos.
         const targetUrl = 'https://midas.minsal.cl/farmacia_v2/WS/getLocalesTurnos.php';
-        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        
+        // corsproxy.io se usa así: https://corsproxy.io/?URL_ENCODED
+        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
         const res = await fetch(proxyUrl);
         
-        if (!res.ok) throw new Error("No se pudo conectar con el MINSAL");
+        // 1. Verificamos si la respuesta HTTP es correcta
+        if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
         
-        const data = await res.json();
+        // 2. Obtenemos el texto crudo primero para ver qué llegó
+        const textData = await res.text();
+
+        // 3. Intentamos convertir ese texto a JSON
+        let data;
+        try {
+            data = JSON.parse(textData);
+        } catch (e) {
+            console.error("No llegó un JSON, llegó esto:", textData.substring(0, 500));
+            throw new Error("El servidor devolvió HTML en lugar de datos.");
+        }
         
-        // A veces la API devuelve null o estructuras raras, aseguramos que sea array
+        // 4. Si es un array, lo guardamos
         if (Array.isArray(data)) {
           setFarmacias(data);
         } else {
             console.error("Formato inesperado:", data);
-            setError("El MINSAL entregó datos con formato incorrecto hoy.");
+            setError("El formato de datos no es válido hoy.");
         }
 
       } catch (err) {
         console.error("Error cargando farmacias:", err);
-        setError("No pudimos cargar los turnos. El servicio del MINSAL podría estar caído.");
+        setError("No pudimos cargar los turnos. Intenta recargar la página.");
       } finally {
         setLoading(false);
       }
