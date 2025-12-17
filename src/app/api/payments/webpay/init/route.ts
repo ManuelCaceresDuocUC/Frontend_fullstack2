@@ -26,7 +26,6 @@ export async function POST(req: Request) {
     const base = (process.env.PUBLIC_BASE_URL ?? `${proto}://${host}`).replace(/\/+$/, "");
     const returnUrl = `${base}/pago/webpay/retorno`;
 
-    // 👇 SDK: (buyOrder, sessionId, amount, returnUrl)
     const { token, url } = await webpayTx.create(order.id, order.id, order.total, returnUrl);
 
     await prisma.payment.upsert({

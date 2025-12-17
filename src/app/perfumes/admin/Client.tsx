@@ -1,10 +1,12 @@
-// src/app/perfumes/admin/Client.tsx
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Image from "next/image";
 import { getJSON } from "@/lib/http";
 
 type Categoria = "NICHO" | "ARABES" | "DISEÑADOR" | "OTROS";
+
+// Definimos el tipo para las variantes que vienen del server
+type StockVariantDTO = { id: string; ml: number; price: number; stock: number; active: boolean };
 
 export type Row = {
   id: string;
@@ -14,23 +16,10 @@ export type Row = {
   precio: number;
   imagenes: string[];
   categoria: "NICHO" | "ARABES" | "DISEÑADOR" | "OTROS";
-  qty?: number;            // <- antes: qty: number
+  qty?: number;
   descripcion?: string;
+  variants?: StockVariantDTO[]; // <--- Agregado para recibir datos del server
 };
-
-type ApiPerfumeDTO = {
-  id: string;
-  nombre: string;
-  marca: string;
-  ml: number;
-  precio: number;
-  imagenes?: unknown;
-  categoria?: string;
-  stock?: number;
-  descripcion?: string;
-};
-
-type StockVariantDTO = { id: string; ml: number; price: number; stock: number; active: boolean };
 
 const CATS = ["NICHO", "ARABES", "DISEÑADOR", "OTROS"] as const;
 const ML = [3, 5, 10] as const;
@@ -57,54 +46,35 @@ type VariantMap = Record<number, { stock: number; price: number; variantId?: str
 
 export default function Client({ initialRows }: { initialRows: Row[] }) {
   const [rows, setRows] = useState<Row[]>(initialRows);
-  const [variants, setVariants] = useState<Record<string, VariantMap>>({}); // por perfumeId
+  
+  // CORRECCIÓN: Inicializamos variants procesando initialRows inmediatamente.
+  // Esto evita que los stocks aparezcan en cero al cargar.
+  const [variants, setVariants] = useState<Record<string, VariantMap>>(() => {
+    const initialState: Record<string, VariantMap> = {};
+    
+    for (const p of initialRows) {
+      const map: VariantMap = {};
+      // Inicializar vacíos
+      ML.forEach(ml => { map[ml] = { stock: 0, price: 0 }; });
+
+      // Llenar con datos del servidor
+      if (Array.isArray(p.variants)) {
+        for (const v of p.variants) {
+          map[v.ml] = { 
+            stock: v.stock, 
+            price: v.price, 
+            variantId: v.id, 
+            active: v.active 
+          };
+        }
+      }
+      initialState[p.id] = map;
+    }
+    return initialState;
+  });
+
   const [savingId, setSavingId] = useState<string | null>(null);
   const filePickers = useRef<Record<string, HTMLInputElement | null>>({});
-
-  // Carga base + variantes
-  useEffect(() => {
-    fetch("/api/perfumes")
-      .then((r) => r.json() as Promise<unknown>)
-      .then(async (raw) => {
-        const arr = Array.isArray(raw) ? (raw as unknown[]) : [];
-        const base: Row[] = arr.map((dRaw) => {
-          const d = dRaw as Partial<ApiPerfumeDTO>;
-          const imgs = Array.isArray(d.imagenes) ? d.imagenes.filter((x): x is string => typeof x === "string") : [];
-          return {
-            id: String(d.id ?? ""),
-            nombre: String(d.nombre ?? ""),
-            marca: String(d.marca ?? ""),
-            ml: Number.isFinite(Number(d.ml)) ? Number(d.ml) : 0,
-            precio: Number.isFinite(Number(d.precio)) ? Number(d.precio) : 0,
-            imagenes: imgs,
-            categoria: ((d.categoria as Categoria) ?? "OTROS"),
-            qty: Number.isFinite(Number(d.stock)) ? Number(d.stock) : 0,
-            descripcion: typeof d.descripcion === "string" ? d.descripcion : "",
-          };
-        });
-        setRows(base);
-
-        // Trae variantes para cada perfume
-        const all = await Promise.all(
-          base.map((p) =>
-            fetch(`/api/stock/${p.id}`)
-              .then((r) => r.json() as Promise<{ perfumeId: string; variants: StockVariantDTO[] }>)
-              .catch(() => ({ perfumeId: p.id, variants: [] as StockVariantDTO[] }))
-          )
-        );
-        const next: Record<string, VariantMap> = {};
-        for (const r of all) {
-          const map: VariantMap = {};
-          for (const ml of ML) {
-            const v = r.variants.find((x) => x.ml === ml);
-            map[ml] = { stock: v?.stock ?? 0, price: v?.price ?? 0, variantId: v?.id, active: v?.active };
-          }
-          next[r.perfumeId] = map;
-        }
-        setVariants(next);
-      })
-      .catch(() => {});
-  }, []);
 
   const setFilePickerRef = (id: string) => (el: HTMLInputElement | null) => {
     filePickers.current[id] = el;

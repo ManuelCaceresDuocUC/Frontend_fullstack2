@@ -1,7 +1,6 @@
-// src/app/perfumes/admin/page.tsx
 import { prisma } from "@/lib/prisma";
 import Client, { type Row } from "./Client";
-import type { Prisma, Perfume } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +45,14 @@ export default async function Page() {
     imagenes: getImagesFromJson(p.images),
     categoria: dbToApiCat(String(p.tipo)),
     descripcion: p.description ?? "",
-    variants: p.variants,
+    // Pasamos las variantes directamente al cliente
+    variants: p.variants.map(v => ({
+      id: v.id,
+      ml: v.ml,
+      price: v.price,
+      stock: v.stock,
+      active: v.active
+    })),
   }));
 
   return <Client initialRows={initialRows} />;
