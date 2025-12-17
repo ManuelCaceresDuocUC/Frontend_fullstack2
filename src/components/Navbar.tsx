@@ -28,39 +28,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
 }
 
 // --- COMPONENTE DEL BOTÓN PALPITANTE ---
-function PulsingPharmacyBtn({ mobile = false }: { mobile?: boolean }) {
-  return (
-    <Link href="/farmacias" className={`${mobile ? "w-full mt-2 flex justify-center" : ""}`}>
-      <motion.div 
-        animate={{
-          scale: [1, 1.03, 1], 
-          boxShadow: [
-            "0 0 0 0 rgba(239, 68, 68, 0)",     
-            "0 0 15px 2px rgba(239, 68, 68, 0.3)",
-            "0 0 0 0 rgba(239, 68, 68, 0)"      
-          ]
-        }}
-        transition={{
-          duration: 2,         // Dura 2 segundos
-          repeat: Infinity,    // Se repite por siempre
-          ease: "easeInOut"    // Movimiento suave, no robótico
-        }}
-        whileHover={{ scale: 1.08, boxShadow: "0 0 15px 5px rgba(239, 68, 68, 0.4)" }}
-        whileTap={{ scale: 0.95 }}
-        className={`relative group flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2 rounded-xl border border-red-200 font-medium hover:bg-red-100 transition-colors ${mobile ? "w-full justify-center" : ""}`}
-      >
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 flex h-3 w-3">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-        </span> 
-        <span className="pl-4 flex items-center gap-2">
-          <BriefcaseMedical className="h-4 w-4" />
-          <span>Farmacias Turno</span>
-        </span>
-      </motion.div>
-    </Link>
-  );
-}
+
 
 export default function Navbar() {
   const hdrRef = useRef<HTMLElement | null>(null);
@@ -173,9 +141,7 @@ export default function Navbar() {
 
             <NavLink href="/contact">Contacto</NavLink>
 
-            <div className="ml-2">
-                <PulsingPharmacyBtn />
-            </div>
+            
 
             {session ? (
               <div className="ml-2 flex items-center gap-3">
@@ -214,7 +180,6 @@ export default function Navbar() {
               <NavLink href="/">Inicio</NavLink>
               <NavLink href="/contact">Contacto</NavLink>
 
-              <PulsingPharmacyBtn mobile />
 
               <div className="my-2 border-t border-slate-100"></div>
 
