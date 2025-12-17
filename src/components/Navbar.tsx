@@ -3,11 +3,9 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-// AGREGAMOS BriefcaseMedical para el icono de farmacia
 import { Menu, X, Phone, BriefcaseMedical } from "lucide-react"; 
 import { useSession, signOut } from "next-auth/react";
 import LogoKuyval from "@/components/LogoKuyval";
-// import ShippingMarquee from "@/components/ShippingMarquee"; // Asumo que esto existe en tu proyecto
 
 const MotionLink = motion.create(Link);
 
@@ -34,16 +32,27 @@ function PulsingPharmacyBtn({ mobile = false }: { mobile?: boolean }) {
   return (
     <Link href="/farmacias" className={`${mobile ? "w-full mt-2 flex justify-center" : ""}`}>
       <motion.div 
-        whileHover={{ scale: 1.05 }}
+        animate={{
+          scale: [1, 1.03, 1], 
+          boxShadow: [
+            "0 0 0 0 rgba(239, 68, 68, 0)",     
+            "0 0 15px 2px rgba(239, 68, 68, 0.3)",
+            "0 0 0 0 rgba(239, 68, 68, 0)"      
+          ]
+        }}
+        transition={{
+          duration: 2,         // Dura 2 segundos
+          repeat: Infinity,    // Se repite por siempre
+          ease: "easeInOut"    // Movimiento suave, no robótico
+        }}
+        whileHover={{ scale: 1.08, boxShadow: "0 0 15px 5px rgba(239, 68, 68, 0.4)" }}
         whileTap={{ scale: 0.95 }}
-        className={`relative group flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2 rounded-xl border border-red-200 font-medium hover:bg-red-100 transition ${mobile ? "w-full justify-center" : ""}`}
+        className={`relative group flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2 rounded-xl border border-red-200 font-medium hover:bg-red-100 transition-colors ${mobile ? "w-full justify-center" : ""}`}
       >
-        {/* El círculo que palpita detrás del icono */}
         <span className="absolute left-3 top-1/2 -translate-y-1/2 flex h-3 w-3">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
           <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-        </span>
-        
+        </span> 
         <span className="pl-4 flex items-center gap-2">
           <BriefcaseMedical className="h-4 w-4" />
           <span>Farmacias Turno</span>
@@ -98,7 +107,6 @@ export default function Navbar() {
 
   return (
     <header ref={hdrRef} className="fixed top-0 inset-x-0 z-50 bg-white/80 backdrop-blur border-b border-slate-200 text-slate-900">
-      {/* Fila superior */}
       <div className="hidden md:flex justify-end text-slate-500 text-sm pr-4 md:pr-8 pt-2">
         <a href="tel:+56912345678" className="flex items-center gap-2 hover:text-slate-700">
           <Phone className="h-4 w-4" />
@@ -106,14 +114,12 @@ export default function Navbar() {
         </a>
       </div>
 
-      {/* Fila principal */}
       <div className="relative mx-auto max-w-7xl px-4 md:px-8 pb-3">
         <div className="mt-3 flex items-center justify-between px-2 py-3">
           <Link href="/" className="flex items-center gap-3" aria-label="Inicio Kuyval">
             <LogoKuyval className="h-8 text-slate-900" />
           </Link>
 
-          {/* Desktop */}
           <nav className="hidden md:flex items-center gap-2">
             <NavLink href="/">Inicio</NavLink>
             <div className="relative" onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
@@ -130,15 +136,43 @@ export default function Navbar() {
                   onMouseEnter={handleEnter}
                   onMouseLeave={handleLeave}
                 >
-                 {/* ... (Tu contenido del menú Decants se mantiene igual) ... */}
-                 <div className="text-center p-4 text-gray-400">Contenido del menú...</div>
+                  <div className="grid grid-cols-3 gap-6">
+                    <div>
+                      <div className="text-xs font-semibold tracking-wider text-slate-500 mb-2">HOMBRE</div>
+                      <ul className="space-y-2">
+                        <li><Link href="/galeria?genero=HOMBRE&tipos=ARABES&decants=1" className="hover:underline">Árabes</Link></li>
+                        <li><Link href="/galeria?genero=HOMBRE&tipos=DISEÑADOR&decants=1" className="hover:underline">Diseñador</Link></li>
+                        <li><Link href="/galeria?genero=HOMBRE&tipos=NICHO&decants=1" className="hover:underline">Nicho</Link></li>
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold tracking-wider text-slate-500 mb-2">MUJER</div>
+                      <ul className="space-y-2">
+                        <li><Link href="/galeria?genero=MUJER&tipos=ARABES&decants=1" className="hover:underline">Árabes</Link></li>
+                        <li><Link href="/galeria?genero=MUJER&tipos=DISEÑADOR&decants=1" className="hover:underline">Diseñador</Link></li>
+                        <li><Link href="/galeria?genero=MUJER&tipos=NICHO&decants=1" className="hover:underline">Nicho</Link></li>
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold tracking-wider text-slate-500 mb-2">UNISEX</div>
+                      <ul className="space-y-2">
+                        <li><Link href="/galeria?genero=UNISEX&tipos=ARABES&decants=1" className="hover:underline">Árabes</Link></li>
+                        <li><Link href="/galeria?genero=UNISEX&tipos=DISEÑADOR&decants=1" className="hover:underline">Diseñador</Link></li>
+                        <li><Link href="/galeria?genero=UNISEX&tipos=NICHO&decants=1" className="hover:underline">Nicho</Link></li>
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="mt-4 text-right">
+                    <Link href="/galeria?decants=1" className="text-sm text-blue-600 hover:underline">
+                      Ver todo Decants →
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
 
             <NavLink href="/contact">Contacto</NavLink>
 
-            {/* --- AQUÍ INSERTAMOS EL BOTÓN EN DESKTOP --- */}
             <div className="ml-2">
                 <PulsingPharmacyBtn />
             </div>
@@ -167,13 +201,11 @@ export default function Navbar() {
             )}
           </nav>
 
-          {/* Toggle móvil */}
           <button onClick={() => setOpen(v => !v)} className="md:hidden rounded-xl border border-slate-300 p-2 text-slate-900">
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
 
-        {/* Móvil */}
         {open && (
           <div className="mt-2 md:hidden rounded-2xl border border-slate-200 bg-white text-slate-900">
             <div className="flex flex-col p-3">
@@ -182,7 +214,6 @@ export default function Navbar() {
               <NavLink href="/">Inicio</NavLink>
               <NavLink href="/contact">Contacto</NavLink>
 
-              {/* --- AQUÍ INSERTAMOS EL BOTÓN EN MÓVIL --- */}
               <PulsingPharmacyBtn mobile />
 
               <div className="my-2 border-t border-slate-100"></div>

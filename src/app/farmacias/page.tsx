@@ -64,11 +64,11 @@ export default function FarmaciasPage() {
         {/* Buscador */}
         <div className="max-w-xl mx-auto mb-12 relative">
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 h-5 w-5" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2  h-5 w-5" />
             <input
               type="text"
               placeholder="Escribe tu comuna (ej: Maipú, Santiago...)"
-              className="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg outline-none transition"
+              className="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg outline-none transition text-black placeholder:text-slate-400"
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
             />

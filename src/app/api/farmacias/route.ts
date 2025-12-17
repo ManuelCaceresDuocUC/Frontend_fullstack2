@@ -1,42 +1,40 @@
 import { NextResponse } from 'next/server';
-import https from 'https';
 
-// Desactivamos la verificación estricta de SSL solo para este agente
-const agent = new https.Agent({
-  rejectUnauthorized: false
-});
+interface FarmaciaTurno {
+  local_id: string;
+  local_nombre: string;
+  comuna_nombre: string;
+  localidad_nombre: string;
+  local_direccion: string;
+  funcionamiento_dia: string;
+  funcionamiento_hora_apertura: string;
+  funcionamiento_hora_cierre: string;
+  local_telefono: string;
+  local_lat: string;
+  local_lng: string;
+}
+export const dynamic = 'force-dynamic';
+
 
 export async function GET(request: Request) {
   try {
+    // 1. Obtener parámetros de búsqueda
     const { searchParams } = new URL(request.url);
     const comunaQuery = searchParams.get('comuna');
-
-    // Usamos el agente personalizado y añadimos headers para parecer un navegador
+    // 2. Llamada a la API del MINSAL
     const res = await fetch('https://midas.minsal.cl/farmacia_v2/WS/getLocalesTurnos.php', {
-      next: { revalidate: 3600 },
-      // @ts-ignore: Next.js fetch extiende el nativo, pero TypeScript a veces reclama por 'agent'
-      agent: agent, 
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
+      next: { revalidate: 3600 } 
     });
 
     if (!res.ok) {
-      throw new Error(`Error del servidor MINSAL: ${res.status} ${res.statusText}`);
+      throw new Error('Error al conectar con el servicio del MINSAL');
     }
 
-    // Intentamos parsear el JSON. Si la API devuelve HTML (error), esto fallará y caerá en el catch
-    const textData = await res.text();
-    let data;
-    try {
-        data = JSON.parse(textData);
-    } catch (e) {
-        console.error("La respuesta no es un JSON válido:", textData.substring(0, 100));
-        throw new Error('La API del Minsal no devolvió un JSON válido.');
-    }
+    const data: FarmaciaTurno[] = await res.json();
 
+    // 3. Filtrado
     if (comunaQuery) {
-      const dataFiltrada = data.filter((farmacia: any) => 
+      const dataFiltrada = data.filter((farmacia) => 
         farmacia.comuna_nombre.toUpperCase().includes(comunaQuery.toUpperCase())
       );
       
@@ -46,17 +44,15 @@ export async function GET(request: Request) {
       });
     }
 
+    // 4. Si no hay filtros, devolvemos todo
     return NextResponse.json({
       cantidad: data.length,
       farmacias: data
     });
 
-  } catch (error: any) {
-    // Este console.error aparecerá en los LOGS de Vercel
-    console.error("❌ Error en API Farmacias:", error.message);
-    
+  } catch (error) {
     return NextResponse.json(
-      { error: 'Hubo un error obteniendo los turnos', details: error.message },
+      { error: 'Hubo un error obteniendo los turnos' },
       { status: 500 }
     );
   }
